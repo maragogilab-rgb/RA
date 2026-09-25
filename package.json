@@ -1,0 +1,16 @@
+{
+  "name": "erp-empresa",
+  "version": "1.0.0",
+  "description": "ERP web para pequenas e médias empresas: clientes, fornecedores, estoque, vendas, compras e financeiro.",
+  "main": "server.js",
+  "private": true,
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "demo": "node --disable-warning=ExperimentalWarning scripts/dados-demo.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  },
+  "license": "UNLICENSED"
+}
