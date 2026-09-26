@@ -2,8 +2,6 @@
 
 const { erro } = require('../http');
 const v = require('../validar');
-const { transacao } = require('../db');
-const { movimentar } = require('./estoque');
 
 function montarBusca(query, camposBusca) {
   const where = [];
@@ -20,23 +18,47 @@ function montarBusca(query, camposBusca) {
   return { where: where.length ? `WHERE ${where.join(' AND ')}` : '', params };
 }
 
-function lerPessoa(b) {
-  return {
+function lerPessoa(b, tabela) {
+  const tipo = v.opcao(b.tipo_pessoa, 'tipo_pessoa', ['PF', 'PJ'], { padrao: 'PJ' });
+  const documento = v.texto(b.documento, 'documento', { max: 30 });
+  if (documento && !v.documentoValido(documento)) throw erro(400, `${tipo === 'PF' ? 'CPF' : 'CNPJ'} inválido: ${documento}`);
+  const cep = v.soDigitos(v.texto(b.cep, 'cep', { max: 10 }));
+  if (cep && cep.length !== 8) throw erro(400, 'CEP deve ter 8 dígitos');
+  const codMun = v.soDigitos(v.texto(b.codigo_municipio, 'codigo_municipio', { max: 7 }));
+  if (codMun && codMun.length !== 7) throw erro(400, 'Código IBGE do município deve ter 7 dígitos');
+  const d = {
     nome: v.texto(b.nome, 'nome', { obrigatorio: true, max: 200 }),
-    documento: v.texto(b.documento, 'documento', { max: 30 }),
+    tipo_pessoa: tipo,
+    documento,
     email: v.texto(b.email, 'email', { max: 200 }),
     telefone: v.texto(b.telefone, 'telefone', { max: 30 }),
-    endereco: v.texto(b.endereco, 'endereco', { max: 300 }),
+    cep,
+    logradouro: v.texto(b.logradouro, 'logradouro', { max: 200 }),
+    numero: v.texto(b.numero, 'numero', { max: 20 }),
+    complemento: v.texto(b.complemento, 'complemento', { max: 100 }),
+    bairro: v.texto(b.bairro, 'bairro', { max: 100 }),
     cidade: v.texto(b.cidade, 'cidade', { max: 100 }),
     uf: v.texto(b.uf, 'uf', { max: 2 })?.toUpperCase() ?? null,
+    codigo_municipio: codMun,
     observacoes: v.texto(b.observacoes, 'observacoes', { max: 2000 }),
     ativo: v.booleano(b.ativo),
   };
+  if (tabela === 'clientes') {
+    Object.assign(d, {
+      nome_fantasia: v.texto(b.nome_fantasia, 'nome_fantasia', { max: 200 }),
+      inscricao_municipal: v.texto(b.inscricao_municipal, 'inscricao_municipal', { max: 30 }),
+      inscricao_estadual: v.texto(b.inscricao_estadual, 'inscricao_estadual', { max: 30 }),
+      email_nf: v.texto(b.email_nf, 'email_nf', { max: 200 }),
+      servico_padrao_id: v.inteiro(b.servico_padrao_id, 'servico_padrao_id'),
+    });
+  } else {
+    d.chave_pix = v.texto(b.chave_pix, 'chave_pix', { max: 100 });
+  }
+  return d;
 }
 
 // Clientes e fornecedores compartilham a mesma estrutura.
 function registrarPessoas(router, db, tabela, rotulo) {
-  const campos = ['nome', 'documento', 'email', 'telefone', 'endereco', 'cidade', 'uf', 'observacoes', 'ativo'];
   const buscar = (id) => {
     const r = db.prepare(`SELECT * FROM ${tabela} WHERE id = ?`).get(id);
     if (!r) throw erro(404, `${rotulo} não encontrado`);
@@ -45,13 +67,15 @@ function registrarPessoas(router, db, tabela, rotulo) {
 
   router.get(`/api/${tabela}`, ({ query }) => {
     const { where, params } = montarBusca(query, ['nome', 'documento', 'email', 'cidade']);
-    return db.prepare(`SELECT * FROM ${tabela} ${where} ORDER BY nome LIMIT 1000`).all(...params);
+    const extra = tabela === 'clientes' ? ', s.nome AS servico_padrao_nome FROM clientes LEFT JOIN servicos s ON s.id = clientes.servico_padrao_id' : ` FROM ${tabela}`;
+    return db.prepare(`SELECT ${tabela}.*${extra} ${where.replace(/\b(nome|ativo|documento|email|cidade)\b/g, `${tabela}.$1`)} ORDER BY ${tabela}.nome LIMIT 1000`).all(...params);
   });
 
   router.get(`/api/${tabela}/:id`, ({ params }) => buscar(params.id));
 
   router.post(`/api/${tabela}`, (ctx) => {
-    const d = lerPessoa(ctx.body);
+    const d = lerPessoa(ctx.body, tabela);
+    const campos = Object.keys(d);
     const r = db.prepare(`INSERT INTO ${tabela} (${campos.join(', ')}) VALUES (${campos.map(() => '?').join(', ')})`)
       .run(...campos.map((c) => d[c]));
     ctx.status = 201;
@@ -60,7 +84,8 @@ function registrarPessoas(router, db, tabela, rotulo) {
 
   router.put(`/api/${tabela}/:id`, ({ params, body }) => {
     buscar(params.id);
-    const d = lerPessoa(body);
+    const d = lerPessoa(body, tabela);
+    const campos = Object.keys(d);
     db.prepare(`UPDATE ${tabela} SET ${campos.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`)
       .run(...campos.map((c) => d[c]), params.id);
     return buscar(params.id);
@@ -73,75 +98,84 @@ function registrarPessoas(router, db, tabela, rotulo) {
   });
 }
 
-function registrarProdutos(router, db) {
+const UNIDADES = ['projeto', 'hora', 'diaria', 'mes', 'unidade', 'video', 'post'];
+
+function registrarServicos(router, db) {
   const buscar = (id) => {
-    const r = db.prepare('SELECT * FROM produtos WHERE id = ?').get(id);
-    if (!r) throw erro(404, 'Produto não encontrado');
+    const r = db.prepare('SELECT * FROM servicos WHERE id = ?').get(id);
+    if (!r) throw erro(404, 'Serviço não encontrado');
     return r;
   };
+  const campos = ['nome', 'descricao', 'categoria', 'unidade', 'preco', 'ativo',
+    'item_lista_servico', 'codigo_tributario_municipio', 'codigo_nbs', 'cnae', 'aliquota_iss'];
   const ler = (b) => ({
-    sku: v.texto(b.sku, 'sku', { max: 60 }),
+    item_lista_servico: v.texto(b.item_lista_servico, 'item_lista_servico', { max: 10 }),
+    codigo_tributario_municipio: v.texto(b.codigo_tributario_municipio, 'codigo_tributario_municipio', { max: 30 }),
+    codigo_nbs: v.texto(b.codigo_nbs, 'codigo_nbs', { max: 20 }),
+    cnae: v.soDigitos(v.texto(b.cnae, 'cnae', { max: 12 })),
+    aliquota_iss: v.numero(b.aliquota_iss, 'aliquota_iss', { min: 0 }),
     nome: v.texto(b.nome, 'nome', { obrigatorio: true, max: 200 }),
     descricao: v.texto(b.descricao, 'descricao', { max: 2000 }),
-    unidade: v.texto(b.unidade, 'unidade', { max: 10 }) || 'UN',
-    preco_custo: v.centavos(b.preco_custo, 'preco_custo', { padrao: 0 }),
-    preco_venda: v.centavos(b.preco_venda, 'preco_venda', { padrao: 0 }),
-    estoque_minimo: v.numero(b.estoque_minimo, 'estoque_minimo', { min: 0, padrao: 0 }),
+    categoria: v.texto(b.categoria, 'categoria', { max: 100 }),
+    unidade: v.opcao(b.unidade, 'unidade', UNIDADES, { padrao: 'projeto' }),
+    preco: v.centavos(b.preco, 'preco', { padrao: 0 }),
     ativo: v.booleano(b.ativo),
   });
-  const campos = ['sku', 'nome', 'descricao', 'unidade', 'preco_custo', 'preco_venda', 'estoque_minimo', 'ativo'];
-  const traduzirUnico = (fn) => {
-    try {
-      return fn();
-    } catch (e) {
-      if (/UNIQUE constraint failed: produtos.sku/.test(e.message)) throw erro(409, 'Já existe um produto com este SKU');
-      throw e;
-    }
-  };
 
-  router.get('/api/produtos', ({ query }) => {
-    const { where, params } = montarBusca(query, ['nome', 'sku', 'descricao']);
-    let sql = `SELECT * FROM produtos ${where}`;
-    if (query.estoque_baixo === '1') sql += `${where ? ' AND' : ' WHERE'} estoque_atual <= estoque_minimo AND ativo = 1`;
-    return db.prepare(`${sql} ORDER BY nome LIMIT 1000`).all(...params);
+  router.get('/api/servicos', ({ query }) => {
+    const { where, params } = montarBusca(query, ['nome', 'descricao', 'categoria']);
+    return db.prepare(`SELECT * FROM servicos ${where} ORDER BY categoria, nome LIMIT 1000`).all(...params);
   });
 
-  router.get('/api/produtos/:id', ({ params }) => buscar(params.id));
+  router.get('/api/servicos/:id', ({ params }) => buscar(params.id));
 
-  router.post('/api/produtos', (ctx) => {
+  router.post('/api/servicos', (ctx) => {
     const d = ler(ctx.body);
-    const inicial = v.numero(ctx.body.estoque_inicial, 'estoque_inicial', { min: 0, padrao: 0 });
-    const id = transacao(db, () => {
-      const novoId = traduzirUnico(() => db.prepare(
-        `INSERT INTO produtos (${campos.join(', ')}) VALUES (${campos.map(() => '?').join(', ')})`,
-      ).run(...campos.map((c) => d[c])).lastInsertRowid);
-      if (inicial > 0) {
-        movimentar(db, novoId, 'entrada', inicial, { motivo: 'Estoque inicial', usuarioId: ctx.usuario.id });
-      }
-      return novoId;
-    });
+    const r = db.prepare(`INSERT INTO servicos (${campos.join(', ')}) VALUES (${campos.map(() => '?').join(', ')})`)
+      .run(...campos.map((c) => d[c]));
     ctx.status = 201;
-    return buscar(id);
+    return buscar(r.lastInsertRowid);
   });
 
-  router.put('/api/produtos/:id', ({ params, body }) => {
+  router.put('/api/servicos/:id', ({ params, body }) => {
     buscar(params.id);
     const d = ler(body);
-    traduzirUnico(() => db.prepare(`UPDATE produtos SET ${campos.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`)
-      .run(...campos.map((c) => d[c]), params.id));
+    db.prepare(`UPDATE servicos SET ${campos.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`).run(...campos.map((c) => d[c]), params.id);
     return buscar(params.id);
   });
 
-  router.delete('/api/produtos/:id', ({ params }) => {
+  router.delete('/api/servicos/:id', ({ params }) => {
     buscar(params.id);
-    db.prepare('UPDATE produtos SET ativo = 0 WHERE id = ?').run(params.id);
+    db.prepare('UPDATE servicos SET ativo = 0 WHERE id = ?').run(params.id);
+  });
+}
+
+// Consulta de CEP (ViaCEP) para preencher endereço e código IBGE do município.
+const cacheCep = new Map();
+function registrarCep(router) {
+  router.get('/api/cep/:cep', async ({ params }) => {
+    const cep = String(params.cep).replace(/\D/g, '');
+    if (cep.length !== 8) throw erro(400, 'CEP deve ter 8 dígitos');
+    if (cacheCep.has(cep)) return cacheCep.get(cep);
+    let r;
+    try {
+      r = await fetch(`https://viacep.com.br/ws/${cep}/json/`, { signal: AbortSignal.timeout(8000) });
+    } catch {
+      throw erro(502, 'Serviço de CEP indisponível. Preencha o endereço manualmente.');
+    }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.erro) throw erro(404, 'CEP não encontrado');
+    const out = { cep, logradouro: d.logradouro || '', bairro: d.bairro || '', cidade: d.localidade || '', uf: d.uf || '', codigo_municipio: d.ibge || '' };
+    cacheCep.set(cep, out);
+    return out;
   });
 }
 
 function registrar(router, db) {
+  registrarCep(router);
   registrarPessoas(router, db, 'clientes', 'Cliente');
   registrarPessoas(router, db, 'fornecedores', 'Fornecedor');
-  registrarProdutos(router, db);
+  registrarServicos(router, db);
 }
 
 module.exports = { registrar };

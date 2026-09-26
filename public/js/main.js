@@ -1,37 +1,37 @@
 import { trocar, GET, POST, h, estado, aviso } from './nucleo.js';
 import * as cad from './cadastros.js';
-import * as docs from './documentos.js';
+import * as proj from './projetos.js';
+import * as ctr from './contratos.js';
+import * as nf from './notas.js';
 import * as fin from './financeiro.js';
 import * as sis from './sistema.js';
 
 const ROTAS = [
   [/^$/, sis.painel],
-  [/^clientes$/, cad.clientes],
-  [/^fornecedores$/, cad.fornecedores],
-  [/^produtos$/, cad.produtos],
-  [/^estoque$/, cad.estoque],
-  [/^vendas$/, docs.lista('vendas')],
-  [/^vendas\/nova$/, docs.editor('vendas')],
-  [/^vendas\/(?<id>\d+)\/editar$/, docs.editor('vendas')],
-  [/^vendas\/(?<id>\d+)$/, docs.detalhe('vendas')],
-  [/^compras$/, docs.lista('compras')],
-  [/^compras\/nova$/, docs.editor('compras')],
-  [/^compras\/(?<id>\d+)\/editar$/, docs.editor('compras')],
-  [/^compras\/(?<id>\d+)$/, docs.detalhe('compras')],
+  [/^projetos$/, proj.lista],
+  [/^projetos\/novo$/, proj.editor],
+  [/^projetos\/(?<id>\d+)\/editar$/, proj.editor],
+  [/^projetos\/(?<id>\d+)$/, proj.detalhe],
+  [/^contratos$/, ctr.contratos],
+  [/^notas$/, nf.lista],
+  [/^notas\/(?<id>\d+)$/, nf.detalhe],
   [/^financeiro(?:\/(?<tipo>receber|pagar))?$/, fin.financeiro],
   [/^fluxo$/, fin.fluxo],
+  [/^clientes$/, cad.clientes],
+  [/^servicos$/, cad.servicos],
+  [/^fornecedores$/, cad.fornecedores],
   [/^relatorios$/, fin.relatorios],
   [/^configuracoes$/, sis.configuracoes],
 ];
 
 const MENU = [
   ['', 'Painel', '◧'],
-  ['vendas', 'Vendas', '◈'],
-  ['compras', 'Compras', '◇'],
+  ['projetos', 'Projetos e propostas', '◈'],
+  ['contratos', 'Contratos (fee)', '↻'],
+  ['notas', 'Notas fiscais', '▤'],
   ['financeiro', 'Financeiro', '◎'],
-  ['estoque', 'Estoque', '▤'],
-  ['produtos', 'Produtos', '▦'],
   ['clientes', 'Clientes', '◉'],
+  ['servicos', 'Serviços', '▦'],
   ['fornecedores', 'Fornecedores', '◍'],
   ['relatorios', 'Relatórios', '▥'],
   ['configuracoes', 'Configurações', '⚙'],
@@ -75,6 +75,7 @@ async function navegar() {
   if (!estado.usuario) return;
   const caminho = location.hash.replace(/^#\/?/, '').replace(/\/$/, '');
   document.body.classList.remove('menu-aberto');
+  document.querySelectorAll('.modal-fundo').forEach((m) => m.remove());
   const secao = caminho.split('/')[0];
   const ativo = secao === 'fluxo' ? 'financeiro' : secao;
   for (const a of menu.children) {

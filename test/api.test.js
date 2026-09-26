@@ -22,10 +22,18 @@ async function api(metodo, caminho, corpo, { semCookie = false } = {}) {
   return { status: r.status, dados: texto ? JSON.parse(texto) : null };
 }
 
+// Simula a API da Focus NFe e guarda as chamadas recebidas.
+const chamadasFocus = [];
+let respostaFocus = { status: 'processando_autorizacao' };
+async function fetchFocusFalso(url, init) {
+  chamadasFocus.push({ url, metodo: init.method, corpo: init.body ? JSON.parse(init.body) : null, auth: init.headers.Authorization });
+  return new Response(JSON.stringify(respostaFocus), { status: 200 });
+}
+
 before(async () => {
   const db = abrir(':memory:');
   garantirAdmin(db, { email: 'admin@teste.com', senha: 'senha-forte-1' });
-  servidor = http.createServer(criarApp(db, { log: false }));
+  servidor = http.createServer(criarApp(db, { log: false, fetchNfse: fetchFocusFalso }));
   await new Promise((r) => servidor.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${servidor.address().port}`;
 });
@@ -57,132 +65,194 @@ test('bloqueia mutações sem JSON (CSRF)', async () => {
 
 let clienteId;
 let fornecedorId;
-let produtoId;
+let servicoId;
+let projetoId;
 
-test('cadastros de clientes, fornecedores e produtos', async () => {
+test('cadastros de clientes, fornecedores e serviços', async () => {
   assert.equal((await api('POST', '/api/clientes', {})).status, 400);
-  const c = await api('POST', '/api/clientes', { nome: 'Maria Silva', documento: '123.456.789-00', uf: 'sp' });
+  assert.equal((await api('POST', '/api/clientes', { nome: 'X', documento: '12.345.678/0001-90' })).status, 400);
+  assert.equal((await api('POST', '/api/clientes', { nome: 'X', tipo_pessoa: 'PF', documento: '111.111.111-11' })).status, 400);
+  const c = await api('POST', '/api/clientes', {
+    nome: 'Pousada Mar Azul Ltda', documento: '11.222.333/0001-81', uf: 'al', cep: '57955-000', codigo_municipio: '2704500',
+  });
   assert.equal(c.status, 201);
-  assert.equal(c.dados.uf, 'SP');
+  assert.equal(c.dados.uf, 'AL');
+  assert.equal(c.dados.cep, '57955000');
   clienteId = c.dados.id;
-
-  const f = await api('POST', '/api/fornecedores', { nome: 'Distribuidora ABC' });
-  fornecedorId = f.dados.id;
-
-  const p = await api('POST', '/api/produtos', {
-    sku: 'CAN-001', nome: 'Caneta azul', preco_custo: 100, preco_venda: 250, estoque_minimo: 5, estoque_inicial: 10,
-  });
-  assert.equal(p.status, 201);
-  assert.equal(p.dados.estoque_atual, 10);
-  produtoId = p.dados.id;
-
-  assert.equal((await api('POST', '/api/produtos', { sku: 'CAN-001', nome: 'Duplicado' })).status, 409);
-  const busca = await api('GET', '/api/clientes?busca=maria');
-  assert.equal(busca.dados.length, 1);
+  fornecedorId = (await api('POST', '/api/fornecedores', { nome: 'Carlos (drone freelancer)' })).dados.id;
+  const s = await api('POST', '/api/servicos', { nome: 'Vídeo institucional', categoria: 'Audiovisual', unidade: 'projeto', preco: 450000 });
+  assert.equal(s.status, 201);
+  servicoId = s.dados.id;
+  assert.equal((await api('POST', '/api/servicos', { nome: 'X', unidade: 'litro' })).status, 400);
+  assert.equal((await api('GET', '/api/clientes?busca=mar azul')).dados.length, 1);
 });
 
-test('compra recebida dá entrada no estoque e gera contas a pagar', async () => {
-  const r = await api('POST', '/api/compras', {
-    fornecedor_id: fornecedorId, data: '2026-01-10', parcelas: 2, receber: true,
-    itens: [{ produto_id: produtoId, quantidade: 20, custo_unitario: 120 }],
+test('proposta -> aprovação gera parcelas a receber', async () => {
+  const prop = await api('POST', '/api/projetos', {
+    cliente_id: clienteId, titulo: 'Vídeo institucional da pousada', parcelas: 2, desconto: 50000,
+    primeiro_vencimento: '2026-01-15',
+    itens: [{ servico_id: servicoId }, { descricao: 'Imagens aéreas com drone', quantidade: 1, preco_unitario: 80000 }],
   });
-  assert.equal(r.status, 201);
-  assert.equal(r.dados.status, 'recebida');
-  assert.equal(r.dados.total, 2400);
-  assert.equal(r.dados.lancamentos.length, 2);
-  assert.deepEqual(r.dados.lancamentos.map((l) => l.vencimento), ['2026-02-10', '2026-03-10']);
-  const p = await api('GET', `/api/produtos/${produtoId}`);
-  assert.equal(p.dados.estoque_atual, 30);
-  assert.equal(p.dados.preco_custo, 120);
+  assert.equal(prop.status, 201);
+  assert.equal(prop.dados.status, 'proposta');
+  assert.equal(prop.dados.itens[0].descricao, 'Vídeo institucional');
+  assert.equal(prop.dados.subtotal, 530000);
+  assert.equal(prop.dados.total, 480000);
+  projetoId = prop.dados.id;
+
+  const ap = await api('POST', `/api/projetos/${projetoId}/aprovar`, {});
+  assert.equal(ap.dados.status, 'aprovado');
+  assert.deepEqual(ap.dados.receitas.map((l) => [l.valor, l.vencimento]), [[240000, '2026-01-15'], [240000, '2026-02-15']]);
+  assert.equal((await api('POST', `/api/projetos/${projetoId}/aprovar`, {})).status, 409);
+  assert.equal((await api('PUT', `/api/projetos/${projetoId}`, { cliente_id: clienteId, titulo: 'x', itens: [{ descricao: 'a' }] })).status, 409);
 });
 
-test('venda: orçamento, confirmação, estoque e contas a receber', async () => {
-  const orc = await api('POST', '/api/vendas', {
-    cliente_id: clienteId, data: hoje(), desconto: 100, forma_pagamento: 'boleto', parcelas: 3,
-    itens: [{ produto_id: produtoId, quantidade: 4 }],
+test('custos do projeto e lucro', async () => {
+  const custo = await api('POST', '/api/lancamentos', {
+    tipo: 'pagar', descricao: 'Diária drone', categoria: 'Freelancers', valor: 60000, vencimento: hoje(),
+    fornecedor_id: fornecedorId, projeto_id: projetoId, pago: true,
   });
-  assert.equal(orc.status, 201);
-  assert.equal(orc.dados.status, 'orcamento');
-  assert.equal(orc.dados.subtotal, 1000);
-  assert.equal(orc.dados.total, 900);
+  assert.equal(custo.status, 201);
+  assert.equal(custo.dados.status, 'pago');
+  const p = await api('GET', `/api/projetos/${projetoId}`);
+  assert.equal(p.dados.resumo.receita, 480000);
+  assert.equal(p.dados.resumo.custos, 60000);
+  assert.equal(p.dados.resumo.lucro, 420000);
+  assert.equal(p.dados.resumo.margem, 87.5);
+});
 
-  const conf = await api('POST', `/api/vendas/${orc.dados.id}/confirmar`);
-  assert.equal(conf.status, 200);
-  assert.equal(conf.dados.status, 'confirmada');
-  assert.equal(conf.dados.lancamentos.length, 3);
-  assert.equal(conf.dados.lancamentos.reduce((s, l) => s + l.valor, 0), 900);
-  assert.equal((await api('GET', `/api/produtos/${produtoId}`)).dados.estoque_atual, 26);
+test('etapas de produção e cancelamento', async () => {
+  assert.equal((await api('POST', `/api/projetos/${projetoId}/etapa`, { status: 'producao' })).dados.status, 'producao');
+  const ent = await api('POST', `/api/projetos/${projetoId}/etapa`, { status: 'entregue' });
+  assert.equal(ent.dados.data_entrega, hoje());
 
-  // Não é possível confirmar duas vezes
-  assert.equal((await api('POST', `/api/vendas/${orc.dados.id}/confirmar`)).status, 409);
-
-  // Pagar uma parcela bloqueia o cancelamento
-  const parcela = conf.dados.lancamentos[0];
-  assert.equal((await api('POST', `/api/lancamentos/${parcela.id}/pagar`, {})).dados.status, 'pago');
-  assert.equal((await api('POST', `/api/vendas/${orc.dados.id}/cancelar`)).status, 409);
-
-  // Estornando, o cancelamento devolve o estoque
+  const parcela = ent.dados.receitas[0];
+  assert.equal((await api('POST', `/api/lancamentos/${parcela.id}/cancelar`)).status, 409);
+  await api('POST', `/api/lancamentos/${parcela.id}/pagar`, {});
+  assert.equal((await api('POST', `/api/projetos/${projetoId}/cancelar`)).status, 409);
   await api('POST', `/api/lancamentos/${parcela.id}/estornar`);
-  const canc = await api('POST', `/api/vendas/${orc.dados.id}/cancelar`);
-  assert.equal(canc.dados.status, 'cancelada');
-  assert.ok(canc.dados.lancamentos.every((l) => l.status === 'cancelado'));
-  assert.equal((await api('GET', `/api/produtos/${produtoId}`)).dados.estoque_atual, 30);
+
+  const dup = await api('POST', `/api/projetos/${projetoId}/duplicar`);
+  assert.equal(dup.status, 201);
+  assert.equal(dup.dados.status, 'proposta');
+  assert.equal(dup.dados.itens.length, 2);
+  assert.equal((await api('POST', `/api/projetos/${dup.dados.id}/recusar`)).dados.status, 'recusado');
+
+  const canc = await api('POST', `/api/projetos/${projetoId}/cancelar`);
+  assert.equal(canc.dados.status, 'cancelado');
+  assert.ok(canc.dados.receitas.every((l) => l.status === 'cancelado'));
 });
 
-test('venda sem estoque suficiente é recusada sem efeitos colaterais', async () => {
-  const antes = (await api('GET', '/api/vendas')).dados.length;
-  const r = await api('POST', '/api/vendas', {
-    cliente_id: clienteId, confirmar: true, itens: [{ produto_id: produtoId, quantidade: 999 }],
+test('contratos de fee mensal geram cobranças sem duplicar', async () => {
+  const c = await api('POST', '/api/contratos', {
+    cliente_id: clienteId, descricao: 'Gestão de redes sociais', valor: 180000, dia_vencimento: 5, inicio: '2026-01-01',
   });
-  assert.equal(r.status, 409);
-  assert.match(r.dados.erro, /Estoque insuficiente/);
-  assert.equal((await api('GET', '/api/vendas')).dados.length, antes);
-  assert.equal((await api('GET', `/api/produtos/${produtoId}`)).dados.estoque_atual, 30);
+  assert.equal(c.status, 201);
+  assert.equal((await api('POST', '/api/contratos', { cliente_id: clienteId, descricao: 'x', valor: 1, dia_vencimento: 31 })).status, 400);
+  await api('POST', '/api/contratos', { cliente_id: clienteId, descricao: 'Encerrado', valor: 1000, inicio: '2025-01-01', fim: '2025-06-30' });
+
+  const g = await api('POST', '/api/contratos/gerar-cobrancas', { competencia: '2026-03' });
+  assert.equal(g.dados.geradas, 1);
+  assert.equal(g.dados.total, 180000);
+  assert.equal((await api('POST', '/api/contratos/gerar-cobrancas', { competencia: '2026-03' })).dados.geradas, 0);
+  const l = (await api('GET', '/api/lancamentos?tipo=receber&busca=redes')).dados;
+  assert.equal(l[0].vencimento, '2026-03-05');
+  assert.equal(l[0].descricao, 'Gestão de redes sociais - 03/2026');
+  assert.equal((await api('POST', '/api/contratos/gerar-cobrancas', { competencia: '2025-12' })).dados.geradas, 0);
 });
 
-test('venda à vista gera recebimento já baixado', async () => {
-  const r = await api('POST', '/api/vendas', {
-    cliente_id: clienteId, confirmar: true, forma_pagamento: 'pix', itens: [{ produto_id: produtoId, quantidade: 1 }],
-  });
-  assert.equal(r.dados.lancamentos.length, 1);
-  assert.equal(r.dados.lancamentos[0].status, 'pago');
-  assert.equal(r.dados.lancamentos[0].valor_pago, 250);
-});
-
-test('movimentação manual de estoque e ajuste', async () => {
-  assert.equal((await api('POST', '/api/estoque/movimentacoes', { produto_id: produtoId, tipo: 'saida', quantidade: 1000 })).status, 409);
-  const aj = await api('POST', '/api/estoque/movimentacoes', { produto_id: produtoId, tipo: 'ajuste', quantidade: 50, motivo: 'Inventário' });
-  assert.equal(aj.dados.estoque_atual, 50);
-  const movs = await api('GET', `/api/estoque/movimentacoes?produto_id=${produtoId}`);
-  assert.equal(movs.dados[0].motivo, 'Inventário');
-});
-
-test('lançamentos manuais, fluxo de caixa e painel', async () => {
+test('lançamentos manuais, fluxo de caixa, painel e relatórios', async () => {
   const l = await api('POST', '/api/lancamentos', { tipo: 'pagar', descricao: 'Aluguel', categoria: 'Aluguel', valor: 150000, vencimento: hoje() });
-  assert.equal(l.status, 201);
   await api('POST', `/api/lancamentos/${l.dados.id}/pagar`, { data: hoje() });
-  const fluxo = await api('GET', '/api/financeiro/fluxo');
-  const mes = fluxo.dados.find((m) => m.mes === hoje().slice(0, 7));
-  assert.equal(mes.saidas, 150000);
-  assert.equal(mes.entradas, 250);
+  const mes = (await api('GET', '/api/financeiro/fluxo')).dados.find((m) => m.mes === hoje().slice(0, 7));
+  assert.equal(mes.saidas, 210000);
 
   const d = await api('GET', '/api/dashboard');
   assert.equal(d.status, 200);
-  assert.equal(d.dados.vendas_mes, 250);
-  assert.equal(d.dados.saldo_mes, 250 - 150000);
+  assert.equal(d.dados.receita_recorrente, 180000);
+  assert.equal(d.dados.saldo_mes, -210000);
 
-  const rel = await api('GET', '/api/relatorios/vendas-por-produto');
-  assert.equal(rel.dados[0].quantidade, 1);
+  for (const r of ['lucro-por-projeto', 'faturamento-por-cliente', 'faturamento-por-servico', 'despesas-por-categoria']) {
+    assert.equal((await api('GET', `/api/relatorios/${r}?de=2025-01-01&ate=2027-12-31`)).status, 200, r);
+  }
+  const porCliente = (await api('GET', '/api/relatorios/faturamento-por-cliente?de=2026-01-01&ate=2026-12-31')).dados;
+  assert.equal(porCliente[0].recorrente, 180000);
+});
+
+test('nota fiscal: pendências, emissão manual e automática (Focus NFe)', async () => {
+  const cli = (await api('POST', '/api/clientes', { nome: 'Restaurante Sabor do Mar Ltda', tipo_pessoa: 'PJ', documento: '11.444.777/0001-61' })).dados;
+  const serv = (await api('POST', '/api/servicos', {
+    nome: 'Gestão de redes sociais', preco: 150000, item_lista_servico: '17.06', aliquota_iss: 2, cnae: '7311-4/00',
+  })).dados;
+  assert.equal(serv.cnae, '7311400');
+
+  const sug = await api('GET', `/api/notas/sugestao?projeto_id=${projetoId}`);
+  assert.equal(sug.status, 200);
+  assert.equal(sug.dados.valor_servicos, 480000);
+  assert.match(sug.dados.discriminacao, /Imagens aéreas com drone/);
+  assert.ok(sug.dados.pendencias.some((p) => p.includes('Empresa: CNPJ')));
+
+  const nota = await api('POST', '/api/notas', {
+    cliente_id: cli.id, servico_id: serv.id, discriminacao: 'Gestão de redes sociais - setembro', valor_servicos: 150000,
+    aliquota: 2, item_lista_servico: '17.06',
+  });
+  assert.equal(nota.status, 201);
+  assert.equal(nota.dados.valor_iss, 3000);
+  assert.ok(nota.dados.pendencias.includes('Cliente: CEP'));
+  assert.equal((await api('POST', `/api/notas/${nota.dados.id}/emitir`)).status, 400);
+
+  // Emissão manual (portal da prefeitura)
+  const man = await api('POST', `/api/notas/${nota.dados.id}/registrar`, { numero: '123', codigo_verificacao: 'ABC' });
+  assert.equal(man.dados.status, 'emitida');
+  assert.equal((await api('POST', `/api/notas/${nota.dados.id}/cancelar`, { justificativa: 'curta' })).status, 400);
+  assert.equal((await api('POST', `/api/notas/${nota.dados.id}/cancelar`, { justificativa: 'Valor emitido incorretamente' })).dados.status, 'cancelada');
+
+  // Completa os dados e configura a emissão automática
+  await api('PUT', `/api/clientes/${cli.id}`, {
+    ...cli, cep: '57955-000', logradouro: 'Rua da Praia', numero: '10', bairro: 'Centro', cidade: 'Maragogi', uf: 'AL', codigo_municipio: '2704500',
+  });
+  const emp = await api('PUT', '/api/empresa', {
+    nome: 'Maragogi Lab', razao_social: 'Maragogi Lab Ltda', cnpj: '11.222.333/0001-81', inscricao_municipal: '1234',
+    regime_tributario: 'simples', codigo_municipio: '2704500', nfse_provedor: 'focusnfe', nfse_ambiente: 'homologacao', nfse_token: 'token-secreto',
+  });
+  assert.equal(emp.dados.nfse_token, undefined);
+  assert.equal(emp.dados.nfse_token_configurado, true);
+
+  const n2 = (await api('POST', '/api/notas', {
+    cliente_id: cli.id, discriminacao: 'Gestão de redes sociais - outubro', valor_servicos: 150000, aliquota: 2, item_lista_servico: '17.06',
+  })).dados;
+  assert.deepEqual(n2.pendencias, []);
+  const env = await api('POST', `/api/notas/${n2.id}/emitir`);
+  assert.equal(env.dados.status, 'processando');
+  const chamada = chamadasFocus.at(-1);
+  assert.match(chamada.url, /^https:\/\/homologacao\.focusnfe\.com\.br\/v2\/nfse\?ref=nf-/);
+  assert.equal(chamada.auth, `Basic ${Buffer.from('token-secreto:').toString('base64')}`);
+  assert.equal(chamada.corpo.servico.valor_servicos, 1500);
+  assert.equal(chamada.corpo.tomador.cnpj, '11444777000161');
+  assert.equal(chamada.corpo.prestador.inscricao_municipal, '1234');
+  assert.equal(chamada.corpo.optante_simples_nacional, true);
+
+  respostaFocus = { status: 'autorizado', numero: '987', codigo_verificacao: 'XYZ', url_danfse: 'https://exemplo/nf.pdf' };
+  const cons = await api('POST', `/api/notas/${n2.id}/consultar`);
+  assert.equal(cons.dados.status, 'emitida');
+  assert.equal(cons.dados.numero, '987');
+  assert.equal(cons.dados.url_pdf, 'https://exemplo/nf.pdf');
+
+  respostaFocus = { status: 'erro_autorizacao', erros: [{ codigo: 'E1', mensagem: 'Alíquota inválida' }] };
+  const n3 = (await api('POST', '/api/notas', { cliente_id: cli.id, discriminacao: 'x', valor_servicos: 100, aliquota: 2, item_lista_servico: '17.06' })).dados;
+  const errada = await api('POST', `/api/notas/${n3.id}/emitir`);
+  assert.equal(errada.dados.status, 'erro');
+  assert.match(errada.dados.mensagem, /Alíquota inválida/);
 });
 
 test('usuários: somente admin gerencia, usuário comum é bloqueado', async () => {
-  const u = await api('POST', '/api/usuarios', { nome: 'Vendedor', email: 'vend@teste.com', senha: 'curta' });
+  const u = await api('POST', '/api/usuarios', { nome: 'Sócio', email: 'socio@teste.com', senha: 'curta' });
   assert.equal(u.status, 400);
-  const ok = await api('POST', '/api/usuarios', { nome: 'Vendedor', email: 'vend@teste.com', senha: 'senha-vendedor' });
+  const ok = await api('POST', '/api/usuarios', { nome: 'Sócio', email: 'socio@teste.com', senha: 'senha-do-socio' });
   assert.equal(ok.status, 201);
 
   const adminCookie = cookie;
-  await api('POST', '/api/login', { email: 'vend@teste.com', senha: 'senha-vendedor' }, { semCookie: true });
+  await api('POST', '/api/login', { email: 'socio@teste.com', senha: 'senha-do-socio' }, { semCookie: true });
   assert.equal((await api('GET', '/api/usuarios')).status, 403);
   assert.equal((await api('GET', '/api/clientes')).status, 200);
   await api('POST', '/api/logout');

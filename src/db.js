@@ -55,75 +55,64 @@ CREATE TABLE IF NOT EXISTS fornecedores (
   criado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS produtos (
+CREATE TABLE IF NOT EXISTS servicos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  sku TEXT UNIQUE,
   nome TEXT NOT NULL,
   descricao TEXT,
-  unidade TEXT NOT NULL DEFAULT 'UN',
-  preco_custo INTEGER NOT NULL DEFAULT 0,
-  preco_venda INTEGER NOT NULL DEFAULT 0,
-  estoque_atual REAL NOT NULL DEFAULT 0,
-  estoque_minimo REAL NOT NULL DEFAULT 0,
+  categoria TEXT,
+  unidade TEXT NOT NULL DEFAULT 'projeto',
+  preco INTEGER NOT NULL DEFAULT 0,
   ativo INTEGER NOT NULL DEFAULT 1,
   criado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS movimentacoes_estoque (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  produto_id INTEGER NOT NULL REFERENCES produtos(id),
-  tipo TEXT NOT NULL CHECK (tipo IN ('entrada', 'saida', 'ajuste')),
-  quantidade REAL NOT NULL,
-  saldo_apos REAL NOT NULL,
-  motivo TEXT,
-  referencia TEXT,
-  usuario_id INTEGER REFERENCES usuarios(id),
-  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS vendas (
+-- Um projeto nasce como proposta; ao ser aprovado vira job e gera as contas a receber.
+CREATE TABLE IF NOT EXISTS projetos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+  titulo TEXT NOT NULL,
+  descricao TEXT,
+  status TEXT NOT NULL DEFAULT 'proposta'
+    CHECK (status IN ('proposta', 'aprovado', 'producao', 'revisao', 'entregue', 'recusado', 'cancelado')),
   data TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'orcamento' CHECK (status IN ('orcamento', 'confirmada', 'cancelada')),
+  validade TEXT,
+  prazo_entrega TEXT,
+  data_aprovacao TEXT,
+  data_entrega TEXT,
   subtotal INTEGER NOT NULL DEFAULT 0,
   desconto INTEGER NOT NULL DEFAULT 0,
   total INTEGER NOT NULL DEFAULT 0,
   forma_pagamento TEXT,
   parcelas INTEGER NOT NULL DEFAULT 1,
+  primeiro_vencimento TEXT,
+  condicoes TEXT,
   observacoes TEXT,
   usuario_id INTEGER REFERENCES usuarios(id),
   criado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS venda_itens (
+CREATE TABLE IF NOT EXISTS projeto_itens (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  venda_id INTEGER NOT NULL REFERENCES vendas(id) ON DELETE CASCADE,
-  produto_id INTEGER NOT NULL REFERENCES produtos(id),
+  projeto_id INTEGER NOT NULL REFERENCES projetos(id) ON DELETE CASCADE,
+  servico_id INTEGER REFERENCES servicos(id),
+  descricao TEXT NOT NULL,
   quantidade REAL NOT NULL,
   preco_unitario INTEGER NOT NULL,
   subtotal INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS compras (
+-- Contratos recorrentes (fee mensal): geram uma cobrança por mês de competência.
+CREATE TABLE IF NOT EXISTS contratos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  fornecedor_id INTEGER NOT NULL REFERENCES fornecedores(id),
-  data TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'recebida', 'cancelada')),
-  total INTEGER NOT NULL DEFAULT 0,
-  parcelas INTEGER NOT NULL DEFAULT 1,
+  cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+  descricao TEXT NOT NULL,
+  valor INTEGER NOT NULL,
+  dia_vencimento INTEGER NOT NULL DEFAULT 10 CHECK (dia_vencimento BETWEEN 1 AND 28),
+  inicio TEXT NOT NULL,
+  fim TEXT,
+  ativo INTEGER NOT NULL DEFAULT 1,
   observacoes TEXT,
-  usuario_id INTEGER REFERENCES usuarios(id),
   criado_em TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS compra_itens (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  compra_id INTEGER NOT NULL REFERENCES compras(id) ON DELETE CASCADE,
-  produto_id INTEGER NOT NULL REFERENCES produtos(id),
-  quantidade REAL NOT NULL,
-  custo_unitario INTEGER NOT NULL,
-  subtotal INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS lancamentos (
@@ -136,20 +125,107 @@ CREATE TABLE IF NOT EXISTS lancamentos (
   status TEXT NOT NULL DEFAULT 'aberto' CHECK (status IN ('aberto', 'pago', 'cancelado')),
   pago_em TEXT,
   valor_pago INTEGER,
+  origem TEXT NOT NULL DEFAULT 'manual',
   cliente_id INTEGER REFERENCES clientes(id),
   fornecedor_id INTEGER REFERENCES fornecedores(id),
-  venda_id INTEGER REFERENCES vendas(id),
-  compra_id INTEGER REFERENCES compras(id),
+  projeto_id INTEGER REFERENCES projetos(id),
+  contrato_id INTEGER REFERENCES contratos(id),
+  competencia TEXT,
   usuario_id INTEGER REFERENCES usuarios(id),
   criado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_mov_produto ON movimentacoes_estoque(produto_id);
-CREATE INDEX IF NOT EXISTS idx_vendas_data ON vendas(data);
-CREATE INDEX IF NOT EXISTS idx_compras_data ON compras(data);
+-- Notas fiscais de serviço (NFS-e).
+CREATE TABLE IF NOT EXISTS notas_fiscais (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  referencia TEXT NOT NULL UNIQUE,
+  cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+  servico_id INTEGER REFERENCES servicos(id),
+  projeto_id INTEGER REFERENCES projetos(id),
+  lancamento_id INTEGER REFERENCES lancamentos(id),
+  discriminacao TEXT NOT NULL,
+  valor_servicos INTEGER NOT NULL,
+  aliquota REAL NOT NULL DEFAULT 0,
+  valor_iss INTEGER NOT NULL DEFAULT 0,
+  iss_retido INTEGER NOT NULL DEFAULT 0,
+  item_lista_servico TEXT,
+  codigo_tributario_municipio TEXT,
+  codigo_nbs TEXT,
+  cnae TEXT,
+  status TEXT NOT NULL DEFAULT 'rascunho' CHECK (status IN ('rascunho', 'processando', 'emitida', 'erro', 'cancelada')),
+  provedor TEXT NOT NULL DEFAULT 'manual',
+  numero TEXT,
+  codigo_verificacao TEXT,
+  data_emissao TEXT,
+  url_pdf TEXT,
+  url_xml TEXT,
+  mensagem TEXT,
+  usuario_id INTEGER REFERENCES usuarios(id),
+  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_projetos_status ON projetos(status);
 CREATE INDEX IF NOT EXISTS idx_lanc_venc ON lancamentos(vencimento);
 CREATE INDEX IF NOT EXISTS idx_lanc_status ON lancamentos(tipo, status);
 `;
+
+// Índices que dependem de colunas adicionadas por migração.
+const INDICES_POS_MIGRACAO = `
+CREATE INDEX IF NOT EXISTS idx_lanc_projeto ON lancamentos(projeto_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_lanc_competencia ON lancamentos(contrato_id, competencia) WHERE contrato_id IS NOT NULL;
+`;
+
+// Colunas acrescentadas depois da criação das tabelas; bancos antigos recebem-nas automaticamente.
+const COLUNAS_EXTRAS = {
+  lancamentos: {
+    origem: "TEXT NOT NULL DEFAULT 'manual'",
+    projeto_id: 'INTEGER REFERENCES projetos(id)',
+    contrato_id: 'INTEGER REFERENCES contratos(id)',
+    competencia: 'TEXT',
+  },
+  // Dados exigidos pela NFS-e para o tomador do serviço.
+  clientes: {
+    tipo_pessoa: "TEXT NOT NULL DEFAULT 'PJ'",
+    nome_fantasia: 'TEXT',
+    inscricao_municipal: 'TEXT',
+    inscricao_estadual: 'TEXT',
+    cep: 'TEXT',
+    logradouro: 'TEXT',
+    numero: 'TEXT',
+    complemento: 'TEXT',
+    bairro: 'TEXT',
+    codigo_municipio: 'TEXT',
+    servico_padrao_id: 'INTEGER REFERENCES servicos(id)',
+    email_nf: 'TEXT',
+  },
+  fornecedores: {
+    tipo_pessoa: "TEXT NOT NULL DEFAULT 'PJ'",
+    chave_pix: 'TEXT',
+    cep: 'TEXT',
+    logradouro: 'TEXT',
+    numero: 'TEXT',
+    complemento: 'TEXT',
+    bairro: 'TEXT',
+    codigo_municipio: 'TEXT',
+  },
+  // Enquadramento fiscal do serviço.
+  servicos: {
+    item_lista_servico: 'TEXT',
+    codigo_tributario_municipio: 'TEXT',
+    codigo_nbs: 'TEXT',
+    cnae: 'TEXT',
+    aliquota_iss: 'REAL',
+  },
+};
+
+function migrar(db) {
+  for (const [tabela, novas] of Object.entries(COLUNAS_EXTRAS)) {
+    const colunas = new Set(db.prepare(`PRAGMA table_info(${tabela})`).all().map((c) => c.name));
+    for (const [nome, def] of Object.entries(novas)) {
+      if (!colunas.has(nome)) db.exec(`ALTER TABLE ${tabela} ADD COLUMN ${nome} ${def}`);
+    }
+  }
+}
 
 function abrir(arquivo) {
   if (arquivo !== ':memory:') {
@@ -159,6 +235,8 @@ function abrir(arquivo) {
   db.exec('PRAGMA foreign_keys = ON;');
   if (arquivo !== ':memory:') db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  migrar(db);
+  db.exec(INDICES_POS_MIGRACAO);
   return db;
 }
 

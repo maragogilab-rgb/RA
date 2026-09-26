@@ -1,99 +1,99 @@
-# ERP Empresa
+# ERP Maragogi Lab
 
-Sistema de gestão empresarial (ERP) web, em português, para pequenas e médias empresas.
+Sistema de gestão para a **Maragogi Lab — agência de marketing e produção audiovisual**.
+Feito para quem vende **serviços**: propostas, jobs, contratos de fee mensal, notas fiscais de serviço (NFS-e) e financeiro.
+
 Roda com **um único comando**, sem dependências externas: apenas Node.js 22+ (usa o SQLite embutido no Node).
 
 ## Módulos
 
 | Módulo | O que faz |
 |---|---|
-| **Painel** | Vendas do mês, saldo de caixa, contas a receber/pagar (com vencidos), valor em estoque, gráfico de vendas dos últimos 6 meses, próximos vencimentos e produtos com estoque baixo |
-| **Vendas** | Orçamentos e vendas com vários itens, desconto, forma de pagamento e parcelamento (até 48x). Ao confirmar: baixa o estoque e gera as contas a receber. Cancelamento devolve o estoque. Impressão do pedido |
-| **Compras** | Pedidos a fornecedores. Ao receber: dá entrada no estoque, atualiza o preço de custo e gera as contas a pagar |
-| **Financeiro** | Contas a receber e a pagar, lançamentos manuais (aluguel, salários…), baixa, estorno, destaque de vencidos e **fluxo de caixa** mensal (realizado e previsto) |
-| **Estoque** | Histórico de movimentações (entrada, saída, ajuste de inventário) com saldo e alerta de estoque mínimo |
-| **Cadastros** | Clientes, fornecedores e produtos (SKU, custo, preço de venda, margem, estoque mínimo) |
-| **Relatórios** | Vendas por produto (com margem), vendas por cliente (ticket médio) e receitas/despesas por categoria |
-| **Configurações** | Dados da empresa (aparecem nas impressões), usuários com perfis *Administrador* e *Usuário*, troca de senha |
+| **Painel** | Recebido no mês, receita recorrente (fee), contas a receber/pagar com vencidos, propostas em aberto, gráfico de recebimentos, jobs em andamento com prazos e próximos vencimentos |
+| **Projetos e propostas** | Monte a proposta com os serviços do catálogo (ou itens avulsos), desconto, parcelas e condições, e **imprima para enviar ao cliente**. Quando aprovada, vira job e gera as parcelas a receber. Acompanhe as etapas (Aprovado → Em produção → Em revisão → Entregue), lance **custos do job** (freelancers, locação de equipamento, deslocamento) e veja o **lucro e a margem de cada projeto** |
+| **Contratos (fee)** | Clientes com mensalidade (gestão de redes sociais, tráfego pago…). Um clique gera as cobranças do mês de todos os contratos, sem duplicar |
+| **Notas fiscais** | NFS-e a partir de um projeto, de uma parcela ou de uma mensalidade. O sistema confere os dados e mostra **o que falta para emitir**. Emissão **manual** (portal da prefeitura) ou **automática** (Focus NFe) |
+| **Financeiro** | Contas a receber e a pagar, baixa, estorno, vencidos e **fluxo de caixa** mensal |
+| **Clientes** | Todos os dados exigidos na NF: CNPJ/CPF (validado), razão social, inscrição municipal, endereço completo com **preenchimento automático pelo CEP** (inclui o código IBGE do município) e o tipo de serviço contratado |
+| **Serviços** | Catálogo com preço de referência e dados fiscais: item da LC 116, alíquota do ISS, CNAE, código municipal e NBS |
+| **Fornecedores** | Freelancers e locadoras, com chave PIX |
+| **Relatórios** | Lucro por projeto, faturamento por cliente (projetos + fee), serviços mais vendidos e despesas por categoria |
 
-Todas as listagens têm busca, filtros e **exportação para CSV** (abre direto no Excel).
-A interface funciona no computador e no celular, com tema claro e escuro automáticos.
+Todas as listagens têm busca, filtros e **exportação para CSV** (abre no Excel).
+Funciona no computador e no celular, com tema claro e escuro.
 
 ## Como usar
 
 ```bash
-# 1. (opcional) carregar dados de exemplo para conhecer o sistema
-npm run demo
-
-# 2. iniciar o servidor
-npm start
+npm run demo   # opcional: carrega dados de exemplo da agência
+npm start      # inicia o sistema
 ```
 
-Acesse **http://localhost:3000** e entre com:
+Acesse **http://localhost:3000** com `admin@empresa.com` / `admin123`.
+**Troque a senha no primeiro acesso** em *Configurações → Minha conta*.
 
-- E-mail: `admin@empresa.com`
-- Senha: `admin123`
+## Nota fiscal de serviço (NFS-e)
 
-> **Troque a senha no primeiro acesso** em *Configurações → Minha conta*.
-> Para definir outro administrador inicial, use as variáveis `ERP_ADMIN_EMAIL` e `ERP_ADMIN_SENHA` antes do primeiro `npm start`.
+1. **Configurações → Dados da empresa e nota fiscal**: preencha razão social, CNPJ, inscrição municipal,
+   regime tributário, endereço (o CEP preenche o código IBGE) e os padrões da nota (item LC 116 e alíquota do ISS).
+2. **Serviços**: informe o item da LC 116 e a alíquota de cada serviço. Os itens mais comuns para agências já vêm na lista:
+   `17.06` (propaganda e publicidade), `13.03` (fotografia e cinematografia), `13.02` (gravação de som),
+   `23.01` (comunicação visual/design), `17.01` (consultoria), `1.08` (sites) e outros.
+   **Confirme os códigos e a alíquota com seu contador**, porque eles dependem da prefeitura e do enquadramento da empresa.
+3. **Clientes**: complete CNPJ/CPF e endereço. A lista mostra quais clientes estão com os dados para NF completos.
+4. Em um projeto (**Emitir NF**) ou em uma parcela a receber (**NF**), o sistema monta a nota com o texto dos serviços.
+
+Formas de emissão:
+
+- **Manual (padrão)**: use **Copiar dados** e cole no portal NFS-e da prefeitura. Depois, clique em **Registrar nota emitida**
+  e informe o número. Funciona em qualquer município, sem custo extra.
+- **Automática (Focus NFe)**: crie uma conta em [focusnfe.com.br](https://focusnfe.com.br), cadastre a empresa e envie
+  o certificado digital A1 no painel da Focus. Depois, em Configurações, escolha *Automática — Focus NFe*, cole o token e
+  teste primeiro em **Homologação**. Só então mude para **Produção**. O sistema envia a nota, consulta a situação
+  (**Atualizar situação**), mostra o motivo de uma recusa da prefeitura, abre o PDF e cancela notas.
 
 ## Configuração
 
 | Variável | Padrão | Descrição |
 |---|---|---|
 | `PORT` | `3000` | Porta HTTP |
-| `HOST` | `0.0.0.0` | Interface de rede |
-| `ERP_DB` | `data/erp.db` | Arquivo do banco de dados SQLite |
+| `ERP_DB` | `data/erp.db` | Arquivo do banco de dados |
 | `ERP_ADMIN_EMAIL` / `ERP_ADMIN_SENHA` | `admin@empresa.com` / `admin123` | Administrador criado quando o banco está vazio |
-| `ERP_COOKIE_SEGURO` | — | Use `1` quando o sistema estiver atrás de HTTPS |
+| `ERP_COOKIE_SEGURO` | — | Use `1` quando estiver atrás de HTTPS |
 | `ERP_LOG` | — | Use `0` para desativar o log de requisições |
 
-### Backup
+**Backup:** todos os dados ficam em `data/erp.db`. Copie esse arquivo regularmente.
 
-Todos os dados ficam no arquivo `data/erp.db`. Para fazer backup, copie esse arquivo
-(de preferência com o servidor parado) ou use `sqlite3 data/erp.db ".backup backup.db"`.
-
-### Colocando em produção
-
-- Rode atrás de um proxy com HTTPS (Nginx, Caddy) e defina `ERP_COOKIE_SEGURO=1`.
-- Use um gerenciador de processos (systemd, pm2) para manter o servidor ativo.
-- Agende backups diários do arquivo do banco.
+**Em produção:** rode atrás de HTTPS (Nginx/Caddy) com `ERP_COOKIE_SEGURO=1`, use um gerenciador de processos
+(systemd/pm2) e agende backups diários.
 
 ## Regras de negócio
 
-- Valores monetários são guardados em **centavos** (inteiros) para evitar erros de arredondamento.
-- Vendas pagas em **dinheiro, PIX ou débito à vista** já entram como recebidas; demais formas geram parcelas mensais em aberto.
-- Não é possível vender mais do que há em estoque; a operação inteira é desfeita se algum item faltar.
-- Uma venda/compra com parcelas já pagas só pode ser cancelada após estornar os pagamentos.
-- Clientes, fornecedores e produtos não são apagados, apenas **inativados**, preservando o histórico.
+- Valores monetários são guardados em centavos para evitar erros de arredondamento.
+- Uma proposta só pode ser editada antes de aprovada. Na aprovação são geradas as parcelas mensais a partir do 1º vencimento.
+- Um projeto com parcela já recebida só pode ser cancelado depois de estornar o recebimento.
+- A cobrança de fee mensal é gerada uma única vez por contrato e mês.
+- Clientes, fornecedores e serviços não são apagados, apenas inativados.
 
 ## Segurança
 
-- Senhas com hash `scrypt` e sal aleatório; sessões em cookie `HttpOnly` + `SameSite=Strict`.
-- Limite de tentativas de login por IP.
-- Proteção CSRF (mutações exigem `Content-Type: application/json`) e cabeçalhos de segurança (CSP, `X-Frame-Options`).
-- Todas as consultas SQL são parametrizadas; a interface nunca insere HTML vindo do usuário.
+- Senhas com hash `scrypt` e sessões em cookie `HttpOnly` + `SameSite=Strict`, com limite de tentativas de login.
+- O token da Focus NFe fica apenas no servidor e nunca é enviado ao navegador.
+- Proteção CSRF, cabeçalhos de segurança (CSP) e consultas SQL parametrizadas.
 
 ## Desenvolvimento
 
 ```bash
-npm test   # testes automatizados da API (node:test)
+npm test   # testes automatizados da API (inclui a emissão de NFS-e com a Focus NFe simulada)
 ```
-
-Estrutura:
 
 ```
 server.js              # ponto de entrada
-src/
-  app.js               # roteamento HTTP, autenticação e arquivos estáticos
-  db.js                # esquema do banco e transações
-  auth.js              # senhas e sessões
-  validar.js           # validação de entrada e utilitários de data/parcelas
-  modulos/             # cadastros, estoque, vendas, compras, financeiro, sistema
+src/app.js             # roteamento HTTP, autenticação e arquivos estáticos
+src/db.js              # esquema do banco e migrações automáticas
+src/modulos/           # cadastros, projetos, contratos, financeiro, notas, sistema
+src/nfse/focusnfe.js   # integração com a API de NFS-e da Focus NFe
 public/                # interface web (HTML/CSS/JS puro, sem build)
-scripts/dados-demo.js  # gera dados de exemplo
+scripts/dados-demo.js  # dados de exemplo
 test/                  # testes da API
 ```
-
-A API REST fica em `/api/*` (JSON). Exemplos: `GET /api/produtos?busca=caneta`,
-`POST /api/vendas`, `POST /api/vendas/:id/confirmar`, `GET /api/financeiro/fluxo?de=2026-01-01&ate=2026-12-31`.

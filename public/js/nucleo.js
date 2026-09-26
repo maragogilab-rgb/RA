@@ -96,18 +96,18 @@ export const paraNumero = (texto) => {
 };
 
 export const ROTULOS = {
-  orcamento: 'Orçamento', confirmada: 'Confirmada', cancelada: 'Cancelada',
-  pendente: 'Pendente', recebida: 'Recebida',
-  aberto: 'Em aberto', pago: 'Pago', cancelado: 'Cancelado',
+  proposta: 'Proposta', aprovado: 'Aprovado', producao: 'Em produção', revisao: 'Em revisão', entregue: 'Entregue',
+  recusado: 'Recusado', cancelado: 'Cancelado',
+  aberto: 'Em aberto', pago: 'Pago',
   receber: 'A receber', pagar: 'A pagar',
-  entrada: 'Entrada', saida: 'Saída', ajuste: 'Ajuste',
-  dinheiro: 'Dinheiro', pix: 'PIX', debito: 'Cartão de débito', credito: 'Cartão de crédito', boleto: 'Boleto', prazo: 'A prazo',
+  pix: 'PIX', transferencia: 'Transferência', boleto: 'Boleto', cartao: 'Cartão', dinheiro: 'Dinheiro',
+  projeto: 'projeto', hora: 'hora', diaria: 'diária', mes: 'mês', unidade: 'unidade', video: 'vídeo', post: 'post',
   admin: 'Administrador', usuario: 'Usuário', inativo: 'Inativo',
 };
 const TOM = {
-  confirmada: 'ok', recebida: 'ok', pago: 'ok', entrada: 'ok',
-  orcamento: 'info', pendente: 'aviso', aberto: 'aviso', ajuste: 'info',
-  cancelada: 'neutro', cancelado: 'neutro', saida: 'neutro',
+  entregue: 'ok', pago: 'ok',
+  proposta: 'info', aprovado: 'info', producao: 'aviso', revisao: 'aviso', aberto: 'aviso',
+  recusado: 'neutro', cancelado: 'neutro',
 };
 export const selo = (status, extra) => h('span', { class: `selo selo-${extra || TOM[status] || 'neutro'}` }, ROTULOS[status] || status);
 
@@ -174,6 +174,10 @@ export function formulario(campos, valores = {}) {
   const els = {};
   const grade = h('div', { class: 'form-grade' });
   for (const c of campos) {
+    if (c.tipo === 'titulo') {
+      grade.append(h('h3', { class: 'form-titulo' }, c.rotulo, c.ajuda ? h('small', { class: 'mudo' }, ` ${c.ajuda}`) : null));
+      continue;
+    }
     let input;
     const id = `f-${c.nome}-${Math.random().toString(36).slice(2, 7)}`;
     const v = valores[c.nome];
@@ -194,13 +198,15 @@ export function formulario(campos, valores = {}) {
       });
     }
     els[c.nome] = input;
-    const rotulo = h('label', { for: id }, c.rotulo, c.obrigatorio ? h('span', { class: 'obrig' }, ' *') : null);
+    const rotulo = h('label', { for: id }, c.rotulo, c.obrigatorio ? h('span', { class: 'obrig' }, ' *') : null,
+      c.nf ? h('span', { class: 'marca-nf', title: 'Necessário para emitir nota fiscal' }, 'NF') : null);
     grade.append(h('div', { class: `campo ${c.largura ? `campo-${c.largura}` : ''} ${c.tipo === 'checkbox' ? 'campo-check' : ''}` },
-      c.tipo === 'checkbox' ? [input, rotulo] : [rotulo, input]));
+      c.tipo === 'checkbox' ? [input, rotulo] : [rotulo, input], c.ajuda ? h('small', { class: 'ajuda' }, c.ajuda) : null));
   }
   const ler = () => {
     const out = {};
     for (const c of campos) {
+      if (c.tipo === 'titulo') continue;
       const el = els[c.nome];
       if (c.tipo === 'checkbox') out[c.nome] = el.checked;
       else if (c.tipo === 'moeda') out[c.nome] = paraCentavos(el.value);

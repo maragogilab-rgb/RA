@@ -27,7 +27,12 @@ function registrarFalha(ip) {
   tentativas.set(ip, t);
 }
 
-const CAMPOS_EMPRESA = ['nome', 'cnpj', 'telefone', 'email', 'endereco'];
+// Dados da empresa (prestador do serviço na NFS-e) e configuração da emissão.
+const CAMPOS_EMPRESA = ['nome', 'razao_social', 'cnpj', 'inscricao_municipal', 'regime_tributario', 'telefone', 'email',
+  'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'codigo_municipio',
+  'aliquota_iss', 'item_lista_servico', 'codigo_tributario_municipio', 'cnae',
+  'nfse_provedor', 'nfse_ambiente', 'nfse_token', 'endereco'];
+const CAMPO_SECRETO = 'nfse_token';
 
 function registrar(router, db) {
   // ---------- Autenticação ----------
@@ -123,21 +128,33 @@ function registrar(router, db) {
   });
 
   // ---------- Dados da empresa ----------
-  const lerEmpresa = () => {
-    const out = Object.fromEntries(CAMPOS_EMPRESA.map((c) => [c, '']));
-    for (const r of db.prepare("SELECT chave, valor FROM configuracoes WHERE chave LIKE 'empresa.%'").all()) {
-      out[r.chave.slice(8)] = r.valor;
-    }
-    return out;
+  // O token da API de NFS-e nunca é devolvido; a interface só sabe se ele está configurado.
+  const publicarEmpresa = () => {
+    const e = lerEmpresa(db);
+    const { [CAMPO_SECRETO]: token, ...resto } = e;
+    return { ...resto, nfse_token_configurado: Boolean(token) };
   };
 
-  router.get('/api/empresa', () => lerEmpresa());
+  router.get('/api/empresa', () => publicarEmpresa());
 
   router.put('/api/empresa', (ctx) => {
     exigirAdmin(ctx);
+    const b = ctx.body;
+    const cnpj = v.texto(b.cnpj, 'cnpj', { max: 30 });
+    if (cnpj && !v.documentoValido(cnpj)) throw erro(400, 'CNPJ da empresa inválido');
+    if (b.codigo_municipio && v.soDigitos(b.codigo_municipio).length !== 7) throw erro(400, 'Código IBGE do município deve ter 7 dígitos');
+    v.opcao(b.regime_tributario, 'regime_tributario', ['simples', 'mei', 'presumido', 'real']);
+    v.opcao(b.nfse_provedor, 'nfse_provedor', ['manual', 'focusnfe']);
+    v.opcao(b.nfse_ambiente, 'nfse_ambiente', ['homologacao', 'producao']);
+    v.numero(b.aliquota_iss, 'aliquota_iss', { min: 0 });
     const up = db.prepare('INSERT INTO configuracoes (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor');
-    for (const c of CAMPOS_EMPRESA) up.run(`empresa.${c}`, v.texto(ctx.body[c], c, { max: 300 }) || '');
-    return lerEmpresa();
+    for (const c of CAMPOS_EMPRESA) {
+      // Token em branco significa "manter o atual".
+      if (c === CAMPO_SECRETO && !b[c]) continue;
+      if (c === 'endereco' && b[c] === undefined) continue;
+      up.run(`empresa.${c}`, v.texto(b[c], c, { max: 500 }) || '');
+    }
+    return publicarEmpresa();
   });
 
   // ---------- Painel ----------
@@ -146,20 +163,29 @@ function registrar(router, db) {
     const inicioMes = `${hoje.slice(0, 7)}-01`;
     const um = (sql, ...p) => Object.values(db.prepare(sql).get(...p))[0] || 0;
     const inicioSerie = v.somarMeses(inicioMes, -5);
+    const competencia = hoje.slice(0, 7);
     return {
-      vendas_mes: um("SELECT SUM(total) FROM vendas WHERE status = 'confirmada' AND data >= ?", inicioMes),
-      qtd_vendas_mes: um("SELECT COUNT(*) FROM vendas WHERE status = 'confirmada' AND data >= ?", inicioMes),
+      recebido_mes: um("SELECT SUM(valor_pago) FROM lancamentos WHERE tipo = 'receber' AND status = 'pago' AND pago_em >= ?", inicioMes),
+      faturado_mes: um("SELECT SUM(valor) FROM lancamentos WHERE tipo = 'receber' AND status != 'cancelado' AND vencimento BETWEEN ? AND ?", inicioMes, `${competencia}-31`),
+      saldo_mes: um(`SELECT SUM(CASE WHEN tipo = 'receber' THEN valor_pago ELSE -valor_pago END)
+        FROM lancamentos WHERE status = 'pago' AND pago_em >= ?`, inicioMes),
       a_receber: um("SELECT SUM(valor) FROM lancamentos WHERE tipo = 'receber' AND status = 'aberto'"),
       a_pagar: um("SELECT SUM(valor) FROM lancamentos WHERE tipo = 'pagar' AND status = 'aberto'"),
       receber_vencido: um("SELECT SUM(valor) FROM lancamentos WHERE tipo = 'receber' AND status = 'aberto' AND vencimento < ?", hoje),
       pagar_vencido: um("SELECT SUM(valor) FROM lancamentos WHERE tipo = 'pagar' AND status = 'aberto' AND vencimento < ?", hoje),
-      saldo_mes: um(`SELECT SUM(CASE WHEN tipo = 'receber' THEN valor_pago ELSE -valor_pago END)
-        FROM lancamentos WHERE status = 'pago' AND pago_em >= ?`, inicioMes),
-      valor_estoque: um('SELECT SUM(estoque_atual * preco_custo) FROM produtos WHERE ativo = 1 AND estoque_atual > 0'),
-      estoque_baixo: db.prepare(`SELECT id, nome, sku, unidade, estoque_atual, estoque_minimo FROM produtos
-        WHERE ativo = 1 AND estoque_atual <= estoque_minimo ORDER BY estoque_atual - estoque_minimo LIMIT 10`).all(),
-      vendas_por_mes: db.prepare(`SELECT substr(data, 1, 7) AS mes, SUM(total) AS total, COUNT(*) AS qtd
-        FROM vendas WHERE status = 'confirmada' AND data >= ? GROUP BY mes ORDER BY mes`).all(inicioSerie),
+      receita_recorrente: um("SELECT SUM(valor) FROM contratos WHERE ativo = 1 AND inicio <= ? AND (fim IS NULL OR fim >= ?)", hoje, hoje),
+      qtd_contratos: um("SELECT COUNT(*) FROM contratos WHERE ativo = 1 AND inicio <= ? AND (fim IS NULL OR fim >= ?)", hoje, hoje),
+      contratos_sem_cobranca: um(`SELECT COUNT(*) FROM contratos ct WHERE ativo = 1 AND inicio <= ? AND (fim IS NULL OR fim >= ?)
+        AND NOT EXISTS (SELECT 1 FROM lancamentos l WHERE l.contrato_id = ct.id AND l.competencia = ?)`, `${competencia}-31`, inicioMes, competencia),
+      propostas_abertas: db.prepare("SELECT COUNT(*) AS qtd, COALESCE(SUM(total), 0) AS total FROM projetos WHERE status = 'proposta'").get(),
+      projetos_por_etapa: db.prepare(`SELECT status, COUNT(*) AS qtd FROM projetos
+        WHERE status IN ('aprovado', 'producao', 'revisao') GROUP BY status`).all(),
+      proximas_entregas: db.prepare(`SELECT p.id, p.titulo, p.status, p.prazo_entrega, c.nome AS cliente_nome
+        FROM projetos p JOIN clientes c ON c.id = p.cliente_id
+        WHERE p.status IN ('aprovado', 'producao', 'revisao')
+        ORDER BY p.prazo_entrega IS NULL, p.prazo_entrega LIMIT 8`).all(),
+      recebido_por_mes: db.prepare(`SELECT substr(pago_em, 1, 7) AS mes, SUM(valor_pago) AS total, COUNT(*) AS qtd
+        FROM lancamentos WHERE tipo = 'receber' AND status = 'pago' AND pago_em >= ? GROUP BY mes ORDER BY mes`).all(inicioSerie),
       proximos_vencimentos: db.prepare(`SELECT l.id, l.tipo, l.descricao, l.valor, l.vencimento,
           COALESCE(c.nome, f.nome) AS pessoa
         FROM lancamentos l LEFT JOIN clientes c ON c.id = l.cliente_id LEFT JOIN fornecedores f ON f.id = l.fornecedor_id
@@ -173,25 +199,39 @@ function registrar(router, db) {
     ate: v.data(query.ate, 'ate') || v.hoje(),
   });
 
-  router.get('/api/relatorios/vendas-por-produto', ({ query }) => {
+  router.get('/api/relatorios/lucro-por-projeto', ({ query }) => {
     const { de, ate } = periodo(query);
     return db.prepare(`
-      SELECT p.id, p.sku, p.nome, p.unidade, SUM(i.quantidade) AS quantidade, SUM(i.subtotal) AS faturamento,
-        SUM(i.quantidade * p.preco_custo) AS custo_estimado
-      FROM venda_itens i JOIN vendas ve ON ve.id = i.venda_id JOIN produtos p ON p.id = i.produto_id
-      WHERE ve.status = 'confirmada' AND ve.data BETWEEN ? AND ?
-      GROUP BY p.id ORDER BY faturamento DESC`).all(de, ate)
-      .map((r) => ({ ...r, custo_estimado: Math.round(r.custo_estimado), margem: r.faturamento - Math.round(r.custo_estimado) }));
+      SELECT p.id, p.titulo, p.status, p.data_aprovacao, c.nome AS cliente_nome,
+        COALESCE((SELECT SUM(valor) FROM lancamentos l WHERE l.projeto_id = p.id AND l.tipo = 'receber' AND l.status != 'cancelado'), 0) AS receita,
+        COALESCE((SELECT SUM(valor) FROM lancamentos l WHERE l.projeto_id = p.id AND l.tipo = 'pagar' AND l.status != 'cancelado'), 0) AS custos
+      FROM projetos p JOIN clientes c ON c.id = p.cliente_id
+      WHERE p.status IN ('aprovado', 'producao', 'revisao', 'entregue') AND p.data_aprovacao BETWEEN ? AND ?
+      ORDER BY p.data_aprovacao DESC`).all(de, ate)
+      .map((r) => ({ ...r, lucro: r.receita - r.custos, margem: r.receita ? Math.round(((r.receita - r.custos) / r.receita) * 1000) / 10 : 0 }));
   });
 
-  router.get('/api/relatorios/vendas-por-cliente', ({ query }) => {
+  router.get('/api/relatorios/faturamento-por-cliente', ({ query }) => {
     const { de, ate } = periodo(query);
     return db.prepare(`
-      SELECT c.id, c.nome, c.documento, COUNT(ve.id) AS qtd_vendas, SUM(ve.total) AS total,
-        ROUND(AVG(ve.total)) AS ticket_medio, MAX(ve.data) AS ultima_compra
-      FROM vendas ve JOIN clientes c ON c.id = ve.cliente_id
-      WHERE ve.status = 'confirmada' AND ve.data BETWEEN ? AND ?
+      SELECT c.id, c.nome, c.documento,
+        SUM(CASE WHEN l.origem = 'projeto' THEN l.valor ELSE 0 END) AS projetos,
+        SUM(CASE WHEN l.origem = 'contrato' THEN l.valor ELSE 0 END) AS recorrente,
+        SUM(l.valor) AS total,
+        SUM(CASE WHEN l.status = 'pago' THEN l.valor_pago ELSE 0 END) AS recebido
+      FROM lancamentos l JOIN clientes c ON c.id = l.cliente_id
+      WHERE l.tipo = 'receber' AND l.status != 'cancelado' AND l.vencimento BETWEEN ? AND ?
       GROUP BY c.id ORDER BY total DESC`).all(de, ate);
+  });
+
+  router.get('/api/relatorios/faturamento-por-servico', ({ query }) => {
+    const { de, ate } = periodo(query);
+    return db.prepare(`
+      SELECT COALESCE(s.nome, i.descricao) AS servico, s.categoria, COUNT(DISTINCT p.id) AS projetos,
+        SUM(i.quantidade) AS quantidade, SUM(i.subtotal) AS total
+      FROM projeto_itens i JOIN projetos p ON p.id = i.projeto_id LEFT JOIN servicos s ON s.id = i.servico_id
+      WHERE p.status IN ('aprovado', 'producao', 'revisao', 'entregue') AND p.data_aprovacao BETWEEN ? AND ?
+      GROUP BY COALESCE(s.id, i.descricao) ORDER BY total DESC`).all(de, ate);
   });
 
   router.get('/api/relatorios/despesas-por-categoria', ({ query }) => {
@@ -203,4 +243,12 @@ function registrar(router, db) {
   });
 }
 
-module.exports = { registrar };
+function lerEmpresa(db) {
+  const out = Object.fromEntries(CAMPOS_EMPRESA.map((c) => [c, '']));
+  for (const r of db.prepare("SELECT chave, valor FROM configuracoes WHERE chave LIKE 'empresa.%'").all()) {
+    out[r.chave.slice(8)] = r.valor;
+  }
+  return out;
+}
+
+module.exports = { registrar, lerEmpresa };

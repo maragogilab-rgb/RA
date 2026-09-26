@@ -22,10 +22,10 @@ const SEGURANCA = {
   'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'",
 };
 
-function criarRouter(db) {
+function criarRouter(db, opcoes) {
   const router = new Router();
-  for (const m of ['sistema', 'cadastros', 'estoque', 'vendas', 'compras', 'financeiro']) {
-    require(`./modulos/${m}`).registrar(router, db);
+  for (const m of ['sistema', 'cadastros', 'projetos', 'contratos', 'financeiro', 'notas']) {
+    require(`./modulos/${m}`).registrar(router, db, opcoes);
   }
   return router;
 }
@@ -46,8 +46,9 @@ function servirEstatico(req, res, caminho) {
   fs.createReadStream(arquivo).pipe(res);
 }
 
-function criarApp(db, { seguro = false, log = true } = {}) {
-  const router = criarRouter(db);
+// opcoes.fetchNfse permite substituir a chamada HTTP à API de NFS-e (usado nos testes).
+function criarApp(db, { seguro = false, log = true, fetchNfse } = {}) {
+  const router = criarRouter(db, { fetchNfse });
 
   return async function app(req, res) {
     const url = new URL(req.url, 'http://localhost');

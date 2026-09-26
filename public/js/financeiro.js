@@ -2,15 +2,20 @@ import {
   trocar, GET, POST, PUT, qs, h, R$, num, dataBR, hoje, inicioMes, mesBR, selo, modal, confirmar, formulario, tabela, cabecalho,
   filtros, btn, aviso, deCentavos, ROTULOS,
 } from './nucleo.js';
+import { novaNotaDe } from './notas.js';
 
-const CATEGORIAS = ['Vendas', 'Serviços', 'Compras', 'Aluguel', 'Salários', 'Impostos', 'Água/Luz/Internet', 'Marketing', 'Transporte', 'Manutenção', 'Outros'];
+const CATEGORIAS = {
+  receber: ['Projetos', 'Fee mensal', 'Outras receitas'],
+  pagar: ['Freelancers', 'Locação de equipamentos', 'Equipamentos', 'Softwares e assinaturas', 'Tráfego pago (mídia)', 'Deslocamento',
+    'Alimentação/Set', 'Aluguel', 'Água/Luz/Internet', 'Impostos', 'Pró-labore', 'Contabilidade', 'Outros'],
+};
 
 export async function financeiro(raiz, params = {}) {
   const tipo = params.tipo === 'pagar' ? 'pagar' : 'receber';
   const [clientes, fornecedores] = await Promise.all([GET('/clientes?ativo=1'), GET('/fornecedores?ativo=1')]);
   const area = h('div');
   const f = filtros([
-    { nome: 'busca', rotulo: 'Buscar descrição ou categoria…' },
+    { nome: 'busca', rotulo: 'Buscar descrição, categoria, cliente…' },
     { nome: 'status', tipo: 'select', rotulo: 'Situação', padrao: 'aberto', opcoes: [['aberto', 'Em aberto'], ['pago', 'Pagos'], ['cancelado', 'Cancelados'], ['', 'Todos']] },
     { nome: 'de', tipo: 'date', rotulo: 'Vencimento de' },
     { nome: 'ate', tipo: 'date', rotulo: 'até' },
@@ -34,7 +39,7 @@ export async function financeiro(raiz, params = {}) {
         { titulo: 'Situação', valor: (l) => (l.status === 'aberto' && l.vencimento < hj ? selo('Vencido', 'erro') : selo(l.status)), csv: (l) => ROTULOS[l.status] },
         { titulo: 'Pago em', valor: (l) => (l.pago_em ? `${dataBR(l.pago_em)} (${R$(l.valor_pago)})` : '') },
         { titulo: '', classe: 'acoes-linha', csv: false, valor: acoesLinha },
-      ], dados, { nomeArquivo: `contas-a-${tipo}`, aoClicar: (l) => l.status === 'aberto' && !l.venda_id && !l.compra_id && abrir(l) }),
+      ], dados, { nomeArquivo: `contas-a-${tipo}`, aoClicar: (l) => l.status === 'aberto' && abrir(l) }),
     );
   }
 
@@ -42,7 +47,7 @@ export async function financeiro(raiz, params = {}) {
     const out = [];
     if (l.status === 'aberto') {
       out.push(btn(tipo === 'receber' ? 'Receber' : 'Pagar', () => baixar(l), 'btn-pequeno btn-primario'));
-      if (!l.venda_id && !l.compra_id) {
+      if (l.origem !== 'projeto') {
         out.push(btn('Cancelar', async () => {
           if (!await confirmar(`Cancelar o lançamento "${l.descricao}"?`, 'Cancelar lançamento', 'btn-perigo')) return;
           try { await POST(`/lancamentos/${l.id}/cancelar`); aviso('Lançamento cancelado'); carregar(); } catch (e) { aviso(e.message, 'erro'); }
@@ -54,8 +59,9 @@ export async function financeiro(raiz, params = {}) {
         try { await POST(`/lancamentos/${l.id}/estornar`); aviso('Pagamento estornado'); carregar(); } catch (e) { aviso(e.message, 'erro'); }
       }, 'btn-pequeno btn-fantasma'));
     }
-    if (l.venda_id) out.push(h('a', { href: `#/vendas/${l.venda_id}`, class: 'link-pequeno' }, `Venda #${l.venda_id}`));
-    if (l.compra_id) out.push(h('a', { href: `#/compras/${l.compra_id}`, class: 'link-pequeno' }, `Compra #${l.compra_id}`));
+    if (tipo === 'receber' && l.status !== 'cancelado') out.push(btn('NF', () => novaNotaDe({ lancamento_id: l.id }), 'btn-pequeno btn-fantasma'));
+    if (l.projeto_id) out.push(h('a', { href: `#/projetos/${l.projeto_id}`, class: 'link-pequeno' }, `Projeto #${l.projeto_id}`));
+    if (l.contrato_id) out.push(h('a', { href: '#/contratos', class: 'link-pequeno' }, 'Contrato'));
     return h('div', { class: 'grupo-acoes' }, out);
   }
 
@@ -84,7 +90,7 @@ export async function financeiro(raiz, params = {}) {
       { nome: 'descricao', rotulo: 'Descrição', obrigatorio: true, largura: 'cheio', max: 300 },
       { nome: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda', obrigatorio: true },
       { nome: 'vencimento', rotulo: 'Vencimento', tipo: 'date', padrao: hoje(), obrigatorio: true },
-      { nome: 'categoria', rotulo: 'Categoria', tipo: 'select', opcoes: [['', '—'], ...CATEGORIAS.map((c) => [c, c])] },
+      { nome: 'categoria', rotulo: 'Categoria', tipo: 'select', opcoes: [['', '—'], ...CATEGORIAS[tipo].map((c) => [c, c])] },
       pessoas,
     ], l);
     modal(l.id ? 'Editar lançamento' : `Nova conta a ${tipo}`, form.el, {
@@ -167,31 +173,42 @@ export function kpi(rotulo, valor, tom, detalhe) {
 // ---------- Relatórios ----------
 export async function relatorios(raiz) {
   const area = h('div');
+  const pct = (n) => `${String(n).replace('.', ',')}%`;
   const RELS = {
-    'vendas-por-produto': {
-      titulo: 'Vendas por produto',
+    'lucro-por-projeto': {
+      titulo: 'Lucro por projeto (aprovados no período)',
       colunas: [
-        { titulo: 'SKU', valor: (l) => l.sku || '' },
-        { titulo: 'Produto', valor: (l) => l.nome },
-        { titulo: 'Quantidade', classe: 'num', valor: (l) => `${num(l.quantidade)} ${l.unidade}` },
-        { titulo: 'Faturamento', classe: 'num', valor: (l) => R$(l.faturamento), csv: (l) => deCentavos(l.faturamento) },
-        { titulo: 'Custo estimado', classe: 'num', valor: (l) => R$(l.custo_estimado), csv: (l) => deCentavos(l.custo_estimado) },
-        { titulo: 'Margem bruta', classe: 'num', valor: (l) => R$(l.margem), csv: (l) => deCentavos(l.margem) },
+        { titulo: 'Nº', valor: (l) => h('a', { href: `#/projetos/${l.id}` }, `#${l.id}`), csv: (l) => l.id },
+        { titulo: 'Projeto', valor: (l) => l.titulo },
+        { titulo: 'Cliente', valor: (l) => l.cliente_nome },
+        { titulo: 'Receita', classe: 'num', valor: (l) => R$(l.receita), csv: (l) => deCentavos(l.receita) },
+        { titulo: 'Custos', classe: 'num', valor: (l) => R$(l.custos), csv: (l) => deCentavos(l.custos) },
+        { titulo: 'Lucro', classe: 'num', valor: (l) => h('span', { class: l.lucro < 0 ? 'txt-negativo' : null }, R$(l.lucro)), csv: (l) => deCentavos(l.lucro) },
+        { titulo: 'Margem', classe: 'num', valor: (l) => pct(l.margem) },
       ],
     },
-    'vendas-por-cliente': {
-      titulo: 'Vendas por cliente',
+    'faturamento-por-cliente': {
+      titulo: 'Faturamento por cliente (vencimentos no período)',
       colunas: [
         { titulo: 'Cliente', valor: (l) => l.nome },
-        { titulo: 'CPF/CNPJ', valor: (l) => l.documento || '' },
-        { titulo: 'Nº vendas', classe: 'num', valor: (l) => l.qtd_vendas },
+        { titulo: 'Projetos', classe: 'num', valor: (l) => R$(l.projetos), csv: (l) => deCentavos(l.projetos) },
+        { titulo: 'Fee mensal', classe: 'num', valor: (l) => R$(l.recorrente), csv: (l) => deCentavos(l.recorrente) },
         { titulo: 'Total', classe: 'num', valor: (l) => R$(l.total), csv: (l) => deCentavos(l.total) },
-        { titulo: 'Ticket médio', classe: 'num', valor: (l) => R$(l.ticket_medio), csv: (l) => deCentavos(l.ticket_medio) },
-        { titulo: 'Última compra', valor: (l) => dataBR(l.ultima_compra) },
+        { titulo: 'Já recebido', classe: 'num', valor: (l) => R$(l.recebido), csv: (l) => deCentavos(l.recebido) },
+      ],
+    },
+    'faturamento-por-servico': {
+      titulo: 'Serviços mais vendidos (projetos aprovados no período)',
+      colunas: [
+        { titulo: 'Serviço', valor: (l) => l.servico },
+        { titulo: 'Categoria', valor: (l) => l.categoria || '' },
+        { titulo: 'Projetos', classe: 'num', valor: (l) => l.projetos },
+        { titulo: 'Quantidade', classe: 'num', valor: (l) => num(l.quantidade) },
+        { titulo: 'Total', classe: 'num', valor: (l) => R$(l.total), csv: (l) => deCentavos(l.total) },
       ],
     },
     'despesas-por-categoria': {
-      titulo: 'Receitas e despesas por categoria',
+      titulo: 'Receitas e despesas por categoria (pagas no período)',
       colunas: [
         { titulo: 'Tipo', valor: (l) => (l.tipo === 'receber' ? 'Receita' : 'Despesa') },
         { titulo: 'Categoria', valor: (l) => l.categoria },

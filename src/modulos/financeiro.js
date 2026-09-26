@@ -3,36 +3,36 @@
 const { erro } = require('../http');
 const v = require('../validar');
 
-// Gera lançamentos parcelados (mensais) vinculados a uma venda ou compra.
-function gerarParcelas(db, { tipo, total, parcelas, dataBase, descricao, categoria, pagoEm = null, vinculos = {}, usuarioId = null }) {
+// Gera lançamentos parcelados mensais a partir do primeiro vencimento.
+function gerarParcelas(db, { tipo, total, parcelas, primeiroVencimento, descricao, categoria, origem, vinculos = {}, usuarioId = null }) {
   const valores = v.dividirParcelas(total, parcelas);
   const ins = db.prepare(`
-    INSERT INTO lancamentos (tipo, descricao, categoria, valor, vencimento, status, pago_em, valor_pago,
-      cliente_id, fornecedor_id, venda_id, compra_id, usuario_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    INSERT INTO lancamentos (tipo, descricao, categoria, valor, vencimento, origem, cliente_id, fornecedor_id, projeto_id, usuario_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   valores.forEach((valor, i) => {
-    const vencimento = pagoEm ? dataBase : v.somarMeses(dataBase, i + 1);
     const desc = parcelas > 1 ? `${descricao} - parcela ${i + 1}/${parcelas}` : descricao;
-    ins.run(tipo, desc, categoria, valor, vencimento, pagoEm ? 'pago' : 'aberto', pagoEm, pagoEm ? valor : null,
-      vinculos.cliente_id ?? null, vinculos.fornecedor_id ?? null, vinculos.venda_id ?? null, vinculos.compra_id ?? null, usuarioId);
+    ins.run(tipo, desc, categoria, valor, v.somarMeses(primeiroVencimento, i), origem,
+      vinculos.cliente_id ?? null, vinculos.fornecedor_id ?? null, vinculos.projeto_id ?? null, usuarioId);
   });
 }
 
-// Cancela os lançamentos em aberto de uma venda/compra; recusa se algum já foi pago.
-function cancelarParcelas(db, coluna, id) {
-  const { n } = db.prepare(`SELECT COUNT(*) AS n FROM lancamentos WHERE ${coluna} = ? AND status = 'pago'`).get(id);
-  if (n > 0) throw erro(409, 'Existem parcelas já pagas. Estorne os pagamentos antes de cancelar.');
-  db.prepare(`UPDATE lancamentos SET status = 'cancelado' WHERE ${coluna} = ? AND status = 'aberto'`).run(id);
+// Cancela os lançamentos em aberto de uma origem; recusa se algum já foi pago.
+function cancelarParcelas(db, { projetoId, origem }) {
+  const { n } = db.prepare("SELECT COUNT(*) AS n FROM lancamentos WHERE projeto_id = ? AND origem = ? AND status = 'pago'").get(projetoId, origem);
+  if (n > 0) throw erro(409, 'Existem parcelas já recebidas. Estorne os recebimentos antes de cancelar.');
+  db.prepare("UPDATE lancamentos SET status = 'cancelado' WHERE projeto_id = ? AND origem = ? AND status = 'aberto'").run(projetoId, origem);
 }
+
+const SELECT_LANC = `
+  SELECT l.*, c.nome AS cliente_nome, f.nome AS fornecedor_nome, p.titulo AS projeto_titulo
+  FROM lancamentos l
+  LEFT JOIN clientes c ON c.id = l.cliente_id
+  LEFT JOIN fornecedores f ON f.id = l.fornecedor_id
+  LEFT JOIN projetos p ON p.id = l.projeto_id`;
 
 function registrar(router, db) {
   const buscar = (id) => {
-    const r = db.prepare(`
-      SELECT l.*, c.nome AS cliente_nome, f.nome AS fornecedor_nome
-      FROM lancamentos l
-      LEFT JOIN clientes c ON c.id = l.cliente_id
-      LEFT JOIN fornecedores f ON f.id = l.fornecedor_id
-      WHERE l.id = ?`).get(id);
+    const r = db.prepare(`${SELECT_LANC} WHERE l.id = ?`).get(id);
     if (!r) throw erro(404, 'Lançamento não encontrado');
     return r;
   };
@@ -46,8 +46,10 @@ function registrar(router, db) {
       vencimento: v.data(b.vencimento, 'vencimento', { obrigatorio: true }),
       cliente_id: v.inteiro(b.cliente_id, 'cliente_id'),
       fornecedor_id: v.inteiro(b.fornecedor_id, 'fornecedor_id'),
+      projeto_id: v.inteiro(b.projeto_id, 'projeto_id'),
     };
     if (d.valor <= 0) throw erro(400, 'O valor deve ser maior que zero');
+    if (d.projeto_id && !db.prepare('SELECT 1 FROM projetos WHERE id = ?').get(d.projeto_id)) throw erro(400, 'Projeto não encontrado');
     return d;
   };
 
@@ -59,12 +61,12 @@ function registrar(router, db) {
     if (query.de) { where.push('l.vencimento >= ?'); params.push(v.data(query.de, 'de')); }
     if (query.ate) { where.push('l.vencimento <= ?'); params.push(v.data(query.ate, 'ate')); }
     if (query.vencidos === '1') { where.push("l.status = 'aberto' AND l.vencimento < ?"); params.push(v.hoje()); }
-    if (query.busca) { where.push('(l.descricao LIKE ? OR l.categoria LIKE ?)'); params.push(`%${query.busca}%`, `%${query.busca}%`); }
-    return db.prepare(`
-      SELECT l.*, c.nome AS cliente_nome, f.nome AS fornecedor_nome
-      FROM lancamentos l
-      LEFT JOIN clientes c ON c.id = l.cliente_id
-      LEFT JOIN fornecedores f ON f.id = l.fornecedor_id
+    if (query.projeto_id) { where.push('l.projeto_id = ?'); params.push(Number(query.projeto_id)); }
+    if (query.busca) {
+      where.push('(l.descricao LIKE ? OR l.categoria LIKE ? OR c.nome LIKE ? OR f.nome LIKE ?)');
+      params.push(...Array(4).fill(`%${query.busca}%`));
+    }
+    return db.prepare(`${SELECT_LANC}
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
       ORDER BY l.vencimento, l.id LIMIT 2000
     `).all(...params);
@@ -74,8 +76,11 @@ function registrar(router, db) {
 
   router.post('/api/lancamentos', (ctx) => {
     const d = ler(ctx.body);
-    const r = db.prepare(`INSERT INTO lancamentos (tipo, descricao, categoria, valor, vencimento, cliente_id, fornecedor_id, usuario_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(d.tipo, d.descricao, d.categoria, d.valor, d.vencimento, d.cliente_id, d.fornecedor_id, ctx.usuario.id);
+    const pagoEm = ctx.body.pago ? (v.data(ctx.body.pago_em, 'pago_em') || v.hoje()) : null;
+    const r = db.prepare(`INSERT INTO lancamentos (tipo, descricao, categoria, valor, vencimento, cliente_id, fornecedor_id, projeto_id,
+        status, pago_em, valor_pago, usuario_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(d.tipo, d.descricao, d.categoria, d.valor, d.vencimento, d.cliente_id, d.fornecedor_id,
+      d.projeto_id, pagoEm ? 'pago' : 'aberto', pagoEm, pagoEm ? d.valor : null, ctx.usuario.id);
     ctx.status = 201;
     return buscar(r.lastInsertRowid);
   });
@@ -108,7 +113,7 @@ function registrar(router, db) {
   router.post('/api/lancamentos/:id/cancelar', ({ params }) => {
     const atual = buscar(params.id);
     if (atual.status !== 'aberto') throw erro(409, 'Somente lançamentos em aberto podem ser cancelados');
-    if (atual.venda_id || atual.compra_id) throw erro(409, 'Este lançamento pertence a uma venda/compra. Cancele o documento de origem.');
+    if (atual.origem === 'projeto') throw erro(409, 'Esta parcela pertence a um projeto aprovado. Cancele o projeto ou ajuste o valor.');
     db.prepare("UPDATE lancamentos SET status = 'cancelado' WHERE id = ?").run(params.id);
     return buscar(params.id);
   });

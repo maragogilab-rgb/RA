@@ -1,24 +1,80 @@
 import {
-  trocar, GET, POST, PUT, DEL, qs, h, R$, num, dataBR, selo, modal, confirmar, formulario, tabela, cabecalho, filtros, btn, aviso,
-  paraNumero, estado,
+  trocar, GET, POST, PUT, DEL, qs, h, R$, selo, modal, confirmar, formulario, tabela, cabecalho, filtros, btn, aviso, ROTULOS,
 } from './nucleo.js';
+
+const CATEGORIAS_SERVICO = ['Audiovisual', 'Fotografia', 'Social media', 'Tráfego pago', 'Design', 'Branding', 'Site', 'Consultoria', 'Outros'];
+const UNIDADES = ['projeto', 'hora', 'diaria', 'mes', 'unidade', 'video', 'post'];
 
 const UFS = ['', 'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
 
-const CAMPOS_PESSOA = [
-  { nome: 'nome', rotulo: 'Nome / Razão social', obrigatorio: true, largura: 'cheio', max: 200 },
-  { nome: 'documento', rotulo: 'CPF / CNPJ', max: 30 },
-  { nome: 'telefone', rotulo: 'Telefone', tipo: 'tel', max: 30 },
-  { nome: 'email', rotulo: 'E-mail', tipo: 'email', largura: 'cheio', max: 200 },
-  { nome: 'endereco', rotulo: 'Endereço', largura: 'cheio', max: 300 },
+const ENDERECO = [
+  { tipo: 'titulo', rotulo: 'Endereço', ajuda: '— digite o CEP para preencher automaticamente' },
+  { nome: 'cep', rotulo: 'CEP', max: 9, nf: true, inputmode: 'numeric' },
+  { nome: 'logradouro', rotulo: 'Logradouro (rua, avenida…)', max: 200, nf: true },
+  { nome: 'numero', rotulo: 'Número', max: 20, nf: true },
+  { nome: 'complemento', rotulo: 'Complemento', max: 100 },
+  { nome: 'bairro', rotulo: 'Bairro', max: 100, nf: true },
   { nome: 'cidade', rotulo: 'Cidade', max: 100 },
-  { nome: 'uf', rotulo: 'UF', tipo: 'select', opcoes: UFS.map((u) => [u, u || '—']) },
-  { nome: 'observacoes', rotulo: 'Observações', tipo: 'textarea', largura: 'cheio' },
+  { nome: 'uf', rotulo: 'UF', tipo: 'select', nf: true, opcoes: UFS.map((u) => [u, u || '—']) },
+  { nome: 'codigo_municipio', rotulo: 'Código IBGE do município', max: 7, nf: true, ajuda: 'Preenchido pelo CEP' },
+];
+
+async function camposCliente() {
+  const servicos = await GET('/servicos?ativo=1');
+  return [
+    { tipo: 'titulo', rotulo: 'Dados cadastrais' },
+    { nome: 'tipo_pessoa', rotulo: 'Tipo', tipo: 'select', opcoes: [['PJ', 'Pessoa jurídica (CNPJ)'], ['PF', 'Pessoa física (CPF)']] },
+    { nome: 'documento', rotulo: 'CNPJ / CPF', max: 30, nf: true },
+    { nome: 'nome', rotulo: 'Razão social / Nome completo', obrigatorio: true, largura: 'cheio', max: 200, nf: true },
+    { nome: 'nome_fantasia', rotulo: 'Nome fantasia', max: 200 },
+    { nome: 'inscricao_municipal', rotulo: 'Inscrição municipal', max: 30 },
+    { nome: 'inscricao_estadual', rotulo: 'Inscrição estadual', max: 30 },
+    { nome: 'servico_padrao_id', rotulo: 'Tipo de serviço contratado', tipo: 'select',
+      opcoes: [['', '—'], ...servicos.map((sv) => [sv.id, sv.nome])], ajuda: 'Usado para sugerir o código do serviço na NF' },
+    { tipo: 'titulo', rotulo: 'Contato' },
+    { nome: 'email', rotulo: 'E-mail', tipo: 'email', max: 200 },
+    { nome: 'telefone', rotulo: 'Telefone / WhatsApp', tipo: 'tel', max: 30 },
+    { nome: 'email_nf', rotulo: 'E-mail para envio da NF', tipo: 'email', largura: 'cheio', max: 200, ajuda: 'Se vazio, usa o e-mail principal' },
+    ...ENDERECO,
+    { tipo: 'titulo', rotulo: 'Outros' },
+    { nome: 'observacoes', rotulo: 'Observações', tipo: 'textarea', largura: 'cheio' },
+    { nome: 'ativo', rotulo: 'Ativo', tipo: 'checkbox' },
+  ];
+}
+
+const CAMPOS_FORNECEDOR = [
+  { nome: 'tipo_pessoa', rotulo: 'Tipo', tipo: 'select', opcoes: [['PF', 'Pessoa física (freelancer)'], ['PJ', 'Pessoa jurídica']] },
+  { nome: 'documento', rotulo: 'CPF / CNPJ', max: 30 },
+  { nome: 'nome', rotulo: 'Nome / Razão social', obrigatorio: true, largura: 'cheio', max: 200 },
+  { nome: 'telefone', rotulo: 'Telefone / WhatsApp', tipo: 'tel', max: 30 },
+  { nome: 'email', rotulo: 'E-mail', tipo: 'email', max: 200 },
+  { nome: 'chave_pix', rotulo: 'Chave PIX', largura: 'cheio', max: 100 },
+  ...ENDERECO.map((c) => ({ ...c, nf: false })),
+  { nome: 'observacoes', rotulo: 'Observações (especialidade, valor da diária…)', tipo: 'textarea', largura: 'cheio' },
   { nome: 'ativo', rotulo: 'Ativo', tipo: 'checkbox' },
 ];
 
+// Preenche o endereço a partir do CEP.
+function ligarCep(form) {
+  const cep = form.els.cep;
+  if (!cep) return;
+  cep.addEventListener('change', async () => {
+    const digitos = cep.value.replace(/\D/g, '');
+    if (digitos.length !== 8) return;
+    try {
+      const d = await GET(`/cep/${digitos}`);
+      for (const k of ['logradouro', 'bairro', 'cidade', 'uf', 'codigo_municipio']) {
+        if (d[k] && form.els[k]) form.els[k].value = d[k];
+      }
+      form.els.numero?.focus();
+    } catch (e) {
+      aviso(e.message, 'erro');
+    }
+  });
+}
+
 // Página genérica de cadastro (lista + formulário em modal).
-function paginaCadastro({ titulo, recurso, singular, campos, colunas, buscaPlaceholder }) {
+function paginaCadastro({ titulo, recurso, singular, campos, colunas, buscaPlaceholder, largo = false }) {
   return async (raiz) => {
     const lista = h('div');
     const f = filtros([
@@ -38,9 +94,11 @@ function paginaCadastro({ titulo, recurso, singular, campos, colunas, buscaPlace
       ], dados, { aoClicar: abrir, nomeArquivo: recurso }));
     }
 
-    function abrir(registro = {}) {
-      const form = formulario(campos, registro);
+    async function abrir(registro = {}) {
+      const form = formulario(typeof campos === 'function' ? await campos() : campos, registro);
+      ligarCep(form);
       modal(registro.id ? `Editar ${singular.toLowerCase()}` : `Novo ${singular.toLowerCase()}`, form.el, {
+        largo,
         acoes: [
           { texto: 'Cancelar', acao: () => {} },
           {
@@ -61,11 +119,16 @@ function paginaCadastro({ titulo, recurso, singular, campos, colunas, buscaPlace
   };
 }
 
+// Cliente pronto para NF quando tem documento e endereço completos.
+const prontoNF = (l) => Boolean(l.documento && l.cep && l.logradouro && l.bairro && l.uf && l.codigo_municipio);
+
 export const clientes = paginaCadastro({
-  titulo: 'Clientes', recurso: 'clientes', singular: 'Cliente', campos: CAMPOS_PESSOA, buscaPlaceholder: 'Buscar por nome, documento, e-mail…',
+  titulo: 'Clientes', recurso: 'clientes', singular: 'Cliente', campos: camposCliente, largo: true, buscaPlaceholder: 'Buscar por nome, documento, e-mail…',
   colunas: [
-    { titulo: 'Nome', valor: (l) => l.nome },
+    { titulo: 'Nome', valor: (l) => h('div', {}, l.nome, l.nome_fantasia ? h('small', { class: 'mudo bloco' }, l.nome_fantasia) : null), csv: (l) => l.nome },
     { titulo: 'CPF/CNPJ', valor: (l) => l.documento || '' },
+    { titulo: 'Serviço', valor: (l) => l.servico_padrao_nome || '' },
+    { titulo: 'Dados p/ NF', valor: (l) => (prontoNF(l) ? selo('Completo', 'ok') : selo('Incompleto', 'aviso')), csv: (l) => (prontoNF(l) ? 'Completo' : 'Incompleto') },
     { titulo: 'Telefone', valor: (l) => l.telefone || '' },
     { titulo: 'E-mail', valor: (l) => l.email || '' },
     { titulo: 'Cidade/UF', valor: (l) => [l.cidade, l.uf].filter(Boolean).join(' / ') },
@@ -73,7 +136,7 @@ export const clientes = paginaCadastro({
 });
 
 export const fornecedores = paginaCadastro({
-  titulo: 'Fornecedores', recurso: 'fornecedores', singular: 'Fornecedor', campos: CAMPOS_PESSOA, buscaPlaceholder: 'Buscar por nome, documento, e-mail…',
+  titulo: 'Fornecedores e freelancers', recurso: 'fornecedores', singular: 'Fornecedor', campos: CAMPOS_FORNECEDOR, largo: true, buscaPlaceholder: 'Buscar por nome, documento, e-mail…',
   colunas: [
     { titulo: 'Nome', valor: (l) => l.nome },
     { titulo: 'CPF/CNPJ', valor: (l) => l.documento || '' },
@@ -83,95 +146,43 @@ export const fornecedores = paginaCadastro({
   ],
 });
 
-const estoqueCelula = (l) => {
-  const baixo = l.ativo && l.estoque_atual <= l.estoque_minimo;
-  return h('span', { class: baixo ? 'txt-alerta' : null, title: baixo ? 'Abaixo do estoque mínimo' : null },
-    baixo ? '▼ ' : '', `${num(l.estoque_atual)} ${l.unidade}`);
-};
+// Itens da LC 116/2003 mais comuns para agências de marketing e produtoras audiovisuais.
+export const ITENS_LC116 = [
+  ['17.06', 'Propaganda e publicidade, planejamento de campanhas, elaboração de materiais publicitários'],
+  ['13.03', 'Fotografia e cinematografia, inclusive revelação, ampliação, cópia, reprodução e trucagem'],
+  ['13.02', 'Fonografia ou gravação de sons, inclusive trucagem, dublagem, mixagem'],
+  ['12.13', 'Produção, mediante ou sem encomenda prévia, de eventos, espetáculos, entrevistas, shows'],
+  ['23.01', 'Programação e comunicação visual, desenho industrial e congêneres'],
+  ['17.01', 'Assessoria ou consultoria de qualquer natureza'],
+  ['17.02', 'Datilografia, digitação, redação, edição, revisão e congêneres'],
+  ['1.08', 'Planejamento, confecção, manutenção e atualização de páginas eletrônicas'],
+  ['1.03', 'Processamento, armazenamento ou hospedagem de dados, textos, imagens, vídeos'],
+  ['10.08', 'Agenciamento de publicidade e propaganda, inclusive veiculação por quaisquer meios'],
+  ['17.10', 'Planejamento, organização e administração de feiras, exposições, congressos'],
+];
 
-export const produtos = async (raiz) => {
-  await paginaCadastro({
-    titulo: 'Produtos', recurso: 'produtos', singular: 'Produto', buscaPlaceholder: 'Buscar por nome, SKU…',
-    campos: [
-      { nome: 'nome', rotulo: 'Nome', obrigatorio: true, largura: 'cheio', max: 200 },
-      { nome: 'sku', rotulo: 'Código / SKU', max: 60 },
-      { nome: 'unidade', rotulo: 'Unidade', padrao: 'UN', max: 10, placeholder: 'UN, KG, CX…' },
-      { nome: 'preco_custo', rotulo: 'Preço de custo (R$)', tipo: 'moeda' },
-      { nome: 'preco_venda', rotulo: 'Preço de venda (R$)', tipo: 'moeda' },
-      { nome: 'estoque_minimo', rotulo: 'Estoque mínimo', tipo: 'number' },
-      { nome: 'estoque_inicial', rotulo: 'Estoque inicial (só no cadastro)', tipo: 'number' },
-      { nome: 'descricao', rotulo: 'Descrição', tipo: 'textarea', largura: 'cheio' },
-      { nome: 'ativo', rotulo: 'Ativo', tipo: 'checkbox' },
-    ],
-    colunas: [
-      { titulo: 'SKU', valor: (l) => l.sku || '' },
-      { titulo: 'Produto', valor: (l) => l.nome },
-      { titulo: 'Custo', classe: 'num', valor: (l) => R$(l.preco_custo), csv: (l) => (l.preco_custo / 100).toFixed(2).replace('.', ',') },
-      { titulo: 'Venda', classe: 'num', valor: (l) => R$(l.preco_venda), csv: (l) => (l.preco_venda / 100).toFixed(2).replace('.', ',') },
-      { titulo: 'Margem', classe: 'num', valor: (l) => (l.preco_venda ? `${(((l.preco_venda - l.preco_custo) / l.preco_venda) * 100).toFixed(1).replace('.', ',')}%` : '—') },
-      { titulo: 'Estoque', classe: 'num', valor: estoqueCelula, csv: (l) => num(l.estoque_atual) },
-      { titulo: 'Mínimo', classe: 'num', valor: (l) => num(l.estoque_minimo) },
-    ],
-  })(raiz);
-};
-
-// ---------- Estoque ----------
-export async function estoque(raiz) {
-  const produtosLista = await GET('/produtos?ativo=1');
-  const lista = h('div');
-  const f = filtros([
-    { nome: 'produto_id', tipo: 'select', rotulo: 'Produto', opcoes: [['', 'Todos os produtos'], ...produtosLista.map((p) => [p.id, p.nome])] },
-    { nome: 'de', tipo: 'date', rotulo: 'De' },
-    { nome: 'ate', tipo: 'date', rotulo: 'Até' },
-  ], carregar);
-
-  async function carregar(filtro = f.valores()) {
-    const movs = await GET(`/estoque/movimentacoes${qs(filtro)}`);
-    trocar(lista, tabela([
-      { titulo: 'Data', valor: (l) => `${dataBR(l.criado_em)} ${l.criado_em.slice(11, 16)}` },
-      { titulo: 'Produto', valor: (l) => l.produto_nome },
-      { titulo: 'Tipo', valor: (l) => selo(l.tipo), csv: (l) => l.tipo },
-      { titulo: 'Quantidade', classe: 'num', valor: (l) => `${l.tipo === 'saida' ? '−' : l.tipo === 'entrada' ? '+' : '='}${num(l.quantidade)} ${l.unidade}` },
-      { titulo: 'Saldo', classe: 'num', valor: (l) => num(l.saldo_apos) },
-      { titulo: 'Motivo', valor: (l) => l.motivo || '' },
-      { titulo: 'Usuário', valor: (l) => l.usuario_nome || '' },
-    ], movs, { nomeArquivo: 'movimentacoes-estoque' }));
-  }
-
-  function novaMovimentacao() {
-    const form = formulario([
-      { nome: 'produto_id', rotulo: 'Produto', tipo: 'select', obrigatorio: true, largura: 'cheio',
-        opcoes: [['', 'Selecione…'], ...produtosLista.map((p) => [p.id, `${p.nome} (saldo: ${num(p.estoque_atual)} ${p.unidade})`])] },
-      { nome: 'tipo', rotulo: 'Tipo', tipo: 'select', opcoes: [['entrada', 'Entrada'], ['saida', 'Saída'], ['ajuste', 'Ajuste (define o saldo)']] },
-      { nome: 'quantidade', rotulo: 'Quantidade', obrigatorio: true, inputmode: 'decimal' },
-      { nome: 'motivo', rotulo: 'Motivo', largura: 'cheio', placeholder: 'Ex.: inventário, perda, devolução…' },
-    ]);
-    modal('Movimentar estoque', form.el, {
-      acoes: [
-        { texto: 'Cancelar', acao: () => {} },
-        {
-          texto: 'Registrar', classe: 'btn-primario', acao: async () => {
-            const d = form.ler();
-            const quantidade = paraNumero(d.quantidade);
-            if (Number.isNaN(quantidade)) throw new Error('Quantidade inválida');
-            await POST('/estoque/movimentacoes', { ...d, produto_id: Number(d.produto_id), quantidade });
-            aviso('Movimentação registrada');
-            estado.recarregar();
-          },
-        },
-      ],
-    });
-  }
-
-  const baixos = produtosLista.filter((p) => p.estoque_atual <= p.estoque_minimo);
-  trocar(raiz,
-    cabecalho('Estoque', btn('Movimentar estoque', novaMovimentacao, 'btn-primario')),
-    baixos.length ? h('div', { class: 'faixa faixa-alerta', role: 'status' },
-      h('strong', {}, `▼ ${baixos.length} produto(s) abaixo do estoque mínimo: `),
-      baixos.slice(0, 8).map((p) => p.nome).join(', '), baixos.length > 8 ? '…' : '') : null,
-    h('h2', { class: 'secao' }, 'Movimentações'),
-    f.el,
-    lista,
-  );
-  await carregar();
-}
+export const servicos = paginaCadastro({
+  titulo: 'Serviços', recurso: 'servicos', singular: 'Serviço', largo: true, buscaPlaceholder: 'Buscar serviço ou categoria…',
+  campos: [
+    { nome: 'nome', rotulo: 'Nome do serviço', obrigatorio: true, largura: 'cheio', max: 200 },
+    { nome: 'categoria', rotulo: 'Categoria', tipo: 'select', opcoes: [['', '—'], ...CATEGORIAS_SERVICO.map((c) => [c, c])] },
+    { nome: 'unidade', rotulo: 'Cobrado por', tipo: 'select', opcoes: UNIDADES.map((u) => [u, ROTULOS[u]]) },
+    { nome: 'preco', rotulo: 'Preço de referência (R$)', tipo: 'moeda' },
+    { nome: 'descricao', rotulo: 'Descrição (aparece na proposta e na NF)', tipo: 'textarea', largura: 'cheio' },
+    { tipo: 'titulo', rotulo: 'Dados fiscais (NFS-e)', ajuda: '— confirme os códigos com seu contador' },
+    { nome: 'item_lista_servico', rotulo: 'Item da lista de serviços (LC 116)', tipo: 'select', nf: true, largura: 'cheio',
+      opcoes: [['', '—'], ...ITENS_LC116.map(([c, t]) => [c, `${c} — ${t}`])] },
+    { nome: 'codigo_tributario_municipio', rotulo: 'Código de tributação do município', max: 30, ajuda: 'Se a prefeitura exigir' },
+    { nome: 'codigo_nbs', rotulo: 'Código NBS', max: 20, ajuda: 'Exigido na NFS-e nacional' },
+    { nome: 'cnae', rotulo: 'CNAE', max: 12, placeholder: 'Ex.: 7311-4/00' },
+    { nome: 'aliquota_iss', rotulo: 'Alíquota do ISS (%)', tipo: 'number', nf: true, placeholder: 'Ex.: 2' },
+    { nome: 'ativo', rotulo: 'Ativo', tipo: 'checkbox' },
+  ],
+  colunas: [
+    { titulo: 'Serviço', valor: (l) => l.nome },
+    { titulo: 'Categoria', valor: (l) => l.categoria || '' },
+    { titulo: 'Preço', classe: 'num', valor: (l) => `${R$(l.preco)} / ${ROTULOS[l.unidade] || l.unidade}`, csv: (l) => (l.preco / 100).toFixed(2).replace('.', ',') },
+    { titulo: 'LC 116', valor: (l) => l.item_lista_servico || h('span', { class: 'txt-alerta' }, 'definir'), csv: (l) => l.item_lista_servico || '' },
+    { titulo: 'ISS', classe: 'num', valor: (l) => (l.aliquota_iss !== null && l.aliquota_iss !== undefined ? `${String(l.aliquota_iss).replace('.', ',')}%` : '—') },
+  ],
+});

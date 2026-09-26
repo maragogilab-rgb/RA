@@ -54,7 +54,7 @@ function graficoBarras(serie) {
     const largura = Math.min(40, banda * 0.5);
     const svg = s('svg', {
       width: W, height: H, viewBox: `0 0 ${W} ${H}`, class: 'grafico', role: 'img',
-      'aria-label': `Vendas confirmadas por mês: ${serie.map((d) => `${mesBR(d.mes)} ${R$(d.total)}`).join('; ')}`,
+      'aria-label': `Recebimentos por mês: ${serie.map((d) => `${mesBR(d.mes)} ${R$(d.total)}`).join('; ')}`,
     });
     for (let i = 0; i <= 3; i++) {
       const v = (topo / 3) * i;
@@ -77,7 +77,7 @@ function graficoBarras(serie) {
       // Área de interação maior que a barra.
       svg.append(s('rect', {
         x: m.l + banda * i, y: m.t, width: banda, height: ih, class: 'alvo', tabindex: 0,
-        'aria-label': `${mesBR(d.mes)}: ${R$(d.total)}, ${d.qtd} venda(s)`,
+        'aria-label': `${mesBR(d.mes)}: ${R$(d.total)}, ${d.qtd} recebimento(s)`,
         onmouseenter: () => mostrar(d, cx, base - alt), onfocus: () => mostrar(d, cx, base - alt),
         onmouseleave: () => { dica.hidden = true; }, onblur: () => { dica.hidden = true; },
       }));
@@ -87,7 +87,7 @@ function graficoBarras(serie) {
   }
 
   function mostrar(d, cx, topoBarra) {
-    trocar(dica, h('strong', {}, mesBR(d.mes)), h('span', {}, R$(d.total)), h('span', { class: 'mudo' }, `${d.qtd} venda(s)`));
+    trocar(dica, h('strong', {}, mesBR(d.mes)), h('span', {}, R$(d.total)), h('span', { class: 'mudo' }, `${d.qtd} recebimento(s)`));
     dica.hidden = false;
     dica.style.left = `${Math.min(Math.max(cx, 60), larguraAtual - 60)}px`;
     dica.style.top = `${topoBarra}px`;
@@ -116,28 +116,42 @@ function ultimosMeses(dados, n = 6) {
 // ---------- Painel ----------
 export async function painel(raiz) {
   const d = await GET('/dashboard');
-  const serie = ultimosMeses(d.vendas_por_mes);
+  const serie = ultimosMeses(d.recebido_por_mes);
   const hj = hoje();
+  const etapa = (st) => d.projetos_por_etapa.find((e) => e.status === st)?.qtd || 0;
   trocar(raiz,
     cabecalho(`Olá, ${estado.usuario.nome.split(' ')[0]}`,
-      btn('Nova venda', () => { location.hash = '#/vendas/nova'; }, 'btn-primario'),
-      btn('Nova compra', () => { location.hash = '#/compras/nova'; })),
+      btn('Nova proposta', () => { location.hash = '#/projetos/novo'; }, 'btn-primario'),
+      btn('Emitir NF', () => { location.hash = '#/notas'; })),
+    d.contratos_sem_cobranca ? h('div', { class: 'faixa faixa-info', role: 'status' },
+      `${d.contratos_sem_cobranca} contrato(s) de fee mensal ainda sem cobrança gerada neste mês. `,
+      h('a', { href: '#/contratos' }, 'Gerar cobranças →')) : null,
     h('div', { class: 'kpis' },
-      kpi('Vendas no mês', R$(d.vendas_mes), null, `${d.qtd_vendas_mes} venda(s) confirmada(s)`),
-      kpi('Saldo de caixa no mês', R$(d.saldo_mes), d.saldo_mes < 0 ? 'negativo' : null, 'Recebido − pago'),
+      kpi('Recebido no mês', R$(d.recebido_mes), null, `Saldo do mês: ${R$(d.saldo_mes)}`),
+      kpi('Receita recorrente (fee)', R$(d.receita_recorrente), null, `${d.qtd_contratos} contrato(s) ativo(s)`),
       kpi('A receber', R$(d.a_receber), null, d.receber_vencido ? `⚠ ${R$(d.receber_vencido)} vencido` : 'Nada vencido'),
       kpi('A pagar', R$(d.a_pagar), null, d.pagar_vencido ? `⚠ ${R$(d.pagar_vencido)} vencido` : 'Nada vencido'),
-      kpi('Valor em estoque', R$(d.valor_estoque), null, 'Pelo preço de custo')),
+      kpi('Propostas em aberto', R$(d.propostas_abertas.total), null, `${d.propostas_abertas.qtd} aguardando o cliente`)),
     h('div', { class: 'painel-grade' },
       h('section', { class: 'cartao cartao-largo' },
-        h('h2', { class: 'secao' }, 'Vendas confirmadas — últimos 6 meses'),
+        h('h2', { class: 'secao' }, 'Recebimentos — últimos 6 meses'),
         graficoBarras(serie),
         h('details', { class: 'ver-dados' }, h('summary', {}, 'Ver dados em tabela'),
           tabela([
             { titulo: 'Mês', valor: (l) => mesBR(l.mes) },
-            { titulo: 'Vendas', classe: 'num', valor: (l) => l.qtd },
+            { titulo: 'Recebimentos', classe: 'num', valor: (l) => l.qtd },
             { titulo: 'Total', classe: 'num', valor: (l) => R$(l.total) },
           ], serie))),
+      h('section', { class: 'cartao' },
+        h('div', { class: 'secao-topo' }, h('h2', { class: 'secao' }, 'Jobs em andamento'),
+          h('span', { class: 'mudo' }, `${etapa('aprovado')} aprovado · ${etapa('producao')} produção · ${etapa('revisao')} revisão`)),
+        d.proximas_entregas.length
+          ? h('ul', { class: 'lista-simples' }, d.proximas_entregas.map((p) => h('li', {},
+            h('a', { href: `#/projetos/${p.id}` },
+              h('span', { class: 'cresce' }, p.titulo, h('small', { class: 'mudo' }, ` · ${p.cliente_nome}`)),
+              selo(p.status),
+              h('span', { class: p.prazo_entrega && p.prazo_entrega < hj ? 'txt-alerta' : 'mudo' }, p.prazo_entrega ? dataBR(p.prazo_entrega) : 'sem prazo')))))
+          : h('p', { class: 'mudo' }, 'Nenhum job em andamento.')),
       h('section', { class: 'cartao' },
         h('h2', { class: 'secao' }, 'Próximos vencimentos'),
         d.proximos_vencimentos.length
@@ -147,15 +161,7 @@ export async function painel(raiz) {
               h('span', { class: 'cresce' }, l.descricao, l.pessoa ? h('small', { class: 'mudo' }, ` · ${l.pessoa}`) : null),
               h('span', { class: l.vencimento < hj ? 'txt-alerta' : 'mudo' }, dataBR(l.vencimento)),
               h('strong', {}, R$(l.valor))))))
-          : h('p', { class: 'mudo' }, 'Nenhuma conta em aberto.')),
-      h('section', { class: 'cartao' },
-        h('h2', { class: 'secao' }, 'Estoque baixo'),
-        d.estoque_baixo.length
-          ? h('ul', { class: 'lista-simples' }, d.estoque_baixo.map((p) => h('li', {},
-            h('a', { href: '#/estoque' }, h('span', { class: 'cresce' }, p.nome),
-              h('span', { class: 'txt-alerta' }, `▼ ${num(p.estoque_atual)} ${p.unidade}`),
-              h('small', { class: 'mudo' }, `mín. ${num(p.estoque_minimo)}`)))))
-          : h('p', { class: 'mudo' }, 'Todos os produtos acima do mínimo.'))),
+          : h('p', { class: 'mudo' }, 'Nenhuma conta em aberto.'))),
   );
 }
 
@@ -165,20 +171,53 @@ export async function configuracoes(raiz) {
   const secoes = [];
 
   const formEmpresa = formulario([
-    { nome: 'nome', rotulo: 'Nome da empresa', largura: 'cheio' },
-    { nome: 'cnpj', rotulo: 'CNPJ' },
+    { tipo: 'titulo', rotulo: 'Identificação' },
+    { nome: 'nome', rotulo: 'Nome fantasia', largura: 'cheio' },
+    { nome: 'razao_social', rotulo: 'Razão social', largura: 'cheio', nf: true },
+    { nome: 'cnpj', rotulo: 'CNPJ', nf: true },
+    { nome: 'inscricao_municipal', rotulo: 'Inscrição municipal', nf: true },
+    { nome: 'regime_tributario', rotulo: 'Regime tributário', tipo: 'select', nf: true,
+      opcoes: [['', '—'], ['simples', 'Simples Nacional'], ['mei', 'MEI'], ['presumido', 'Lucro Presumido'], ['real', 'Lucro Real']] },
     { nome: 'telefone', rotulo: 'Telefone' },
-    { nome: 'email', rotulo: 'E-mail', tipo: 'email' },
-    { nome: 'endereco', rotulo: 'Endereço', largura: 'cheio' },
+    { nome: 'email', rotulo: 'E-mail', tipo: 'email', largura: 'cheio' },
+    { tipo: 'titulo', rotulo: 'Endereço', ajuda: '— digite o CEP para preencher' },
+    { nome: 'cep', rotulo: 'CEP' },
+    { nome: 'logradouro', rotulo: 'Logradouro' },
+    { nome: 'numero', rotulo: 'Número' },
+    { nome: 'complemento', rotulo: 'Complemento' },
+    { nome: 'bairro', rotulo: 'Bairro' },
+    { nome: 'cidade', rotulo: 'Cidade' },
+    { nome: 'uf', rotulo: 'UF', max: 2 },
+    { nome: 'codigo_municipio', rotulo: 'Código IBGE do município', nf: true },
+    { tipo: 'titulo', rotulo: 'Padrões da nota fiscal', ajuda: '— usados quando o serviço não define os seus' },
+    { nome: 'item_lista_servico', rotulo: 'Item LC 116 padrão', placeholder: 'Ex.: 17.06' },
+    { nome: 'aliquota_iss', rotulo: 'Alíquota ISS padrão (%)', tipo: 'number', placeholder: 'Ex.: 2' },
+    { nome: 'codigo_tributario_municipio', rotulo: 'Código de tributação municipal' },
+    { nome: 'cnae', rotulo: 'CNAE principal', placeholder: 'Ex.: 7311-4/00' },
+    { tipo: 'titulo', rotulo: 'Emissão automática (opcional)' },
+    { nome: 'nfse_provedor', rotulo: 'Forma de emissão', tipo: 'select',
+      opcoes: [['manual', 'Manual — emito no portal da prefeitura'], ['focusnfe', 'Automática — Focus NFe']] },
+    { nome: 'nfse_ambiente', rotulo: 'Ambiente', tipo: 'select', opcoes: [['homologacao', 'Homologação (teste)'], ['producao', 'Produção (validade fiscal)']] },
+    { nome: 'nfse_token', rotulo: 'Token da API Focus NFe', tipo: 'password', largura: 'cheio', autocomplete: 'off',
+      placeholder: estado.empresa?.nfse_token_configurado ? '•••••••• (configurado — deixe vazio para manter)' : 'Cole aqui o token da Focus NFe' },
   ], estado.empresa || {});
+  formEmpresa.els.cep.addEventListener('change', async () => {
+    const cep = formEmpresa.els.cep.value.replace(/\D/g, '');
+    if (cep.length !== 8) return;
+    try {
+      const d = await GET(`/cep/${cep}`);
+      for (const k of ['logradouro', 'bairro', 'cidade', 'uf', 'codigo_municipio']) if (d[k]) formEmpresa.els[k].value = d[k];
+    } catch (e) { aviso(e.message, 'erro'); }
+  });
   if (!admin) Object.values(formEmpresa.els).forEach((el) => { el.disabled = true; });
-  secoes.push(h('section', { class: 'cartao' }, h('h2', { class: 'secao' }, 'Dados da empresa'),
-    h('p', { class: 'mudo' }, 'Aparecem no menu e nos documentos impressos.'),
+  secoes.push(h('section', { class: 'cartao' }, h('h2', { class: 'secao' }, 'Dados da empresa e nota fiscal'),
+    h('p', { class: 'mudo' }, 'Os campos marcados com NF são exigidos pela prefeitura para emitir a NFS-e. Confirme os códigos fiscais com seu contador.'),
     formEmpresa.el,
     admin ? btn('Salvar dados da empresa', async () => {
       try {
         estado.empresa = await PUT('/empresa', formEmpresa.ler());
-        document.querySelector('.marca-nome').textContent = estado.empresa.nome || 'ERP';
+        formEmpresa.els.nfse_token.value = '';
+        document.querySelectorAll('.marca-nome').forEach((el) => { el.textContent = estado.empresa.nome || 'ERP'; });
         aviso('Dados salvos');
       } catch (e) { aviso(e.message, 'erro'); }
     }, 'btn-primario') : null));
@@ -231,7 +270,7 @@ export async function configuracoes(raiz) {
     };
     secoes.push(h('section', { class: 'cartao' },
       h('div', { class: 'secao-topo' }, h('h2', { class: 'secao' }, 'Usuários'), btn('Novo usuário', () => abrirUsuario(), 'btn-pequeno')),
-      h('p', { class: 'mudo' }, 'Administradores gerenciam usuários e dados da empresa. Usuários comuns operam todos os módulos.'),
+      h('p', { class: 'mudo' }, 'Dê acesso a sócios ou ao seu contador. Administradores gerenciam usuários e dados da empresa.'),
       areaUsuarios));
     await carregarUsuarios();
   }
