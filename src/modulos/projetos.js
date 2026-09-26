@@ -3,7 +3,9 @@
 const { erro } = require('../http');
 const { transacao } = require('../db');
 const v = require('../validar');
+const crypto = require('node:crypto');
 const { gerarParcelas, cancelarParcelas } = require('./financeiro');
+const { lerEmpresa } = require('./sistema');
 
 const FORMAS = ['pix', 'transferencia', 'boleto', 'cartao', 'dinheiro'];
 // Etapas de um job aprovado, na ordem em que acontecem.
@@ -13,9 +15,9 @@ const STATUS = ['proposta', ...ETAPAS, 'recusado', 'cancelado'];
 function registrar(router, db) {
   const buscar = (id) => {
     const p = db.prepare(`
-      SELECT p.*, c.nome AS cliente_nome, c.nome_fantasia AS cliente_fantasia, c.documento AS cliente_documento,
+      SELECT p.*, c.nome AS cliente_nome, c.nome_fantasia AS cliente_fantasia, pc.nome AS parceiro_nome, c.documento AS cliente_documento,
         c.email AS cliente_email, c.telefone AS cliente_telefone, c.contato AS cliente_contato
-      FROM projetos p JOIN clientes c ON c.id = p.cliente_id
+      FROM projetos p JOIN clientes c ON c.id = p.cliente_id LEFT JOIN clientes pc ON pc.id = p.parceiro_id
       WHERE p.id = ?`).get(id);
     if (!p) throw erro(404, 'Projeto não encontrado');
     p.itens = db.prepare('SELECT * FROM projeto_itens WHERE projeto_id = ? ORDER BY id').all(id);
@@ -65,6 +67,8 @@ function registrar(router, db) {
     const subtotal = itens.reduce((s, it) => s + it.subtotal, 0);
     const desconto = v.centavos(b.desconto, 'desconto', { padrao: 0 });
     if (desconto > subtotal) throw erro(400, 'O desconto não pode ser maior que o subtotal');
+    if (b.comissao_pct > 100) throw erro(400, 'Comissão deve ser até 100%');
+    if (b.parceiro_id && !db.prepare('SELECT 1 FROM clientes WHERE id = ?').get(b.parceiro_id)) throw erro(400, 'Parceiro não encontrado');
     const parcelas = v.inteiro(b.parcelas, 'parcelas', { min: 1, padrao: 1 });
     if (parcelas > 36) throw erro(400, 'Máximo de 36 parcelas');
     return {
@@ -86,6 +90,9 @@ function registrar(router, db) {
       categoria: v.texto(b.categoria, 'categoria', { max: 100 }),
       prazo_texto: v.texto(b.prazo_texto, 'prazo_texto', { max: 200 }),
       pagamento_texto: v.texto(b.pagamento_texto, 'pagamento_texto', { max: 200 }),
+      area: v.texto(b.area, 'area', { max: 100 }),
+      parceiro_id: v.inteiro(b.parceiro_id, 'parceiro_id'),
+      comissao_pct: v.numero(b.comissao_pct, 'comissao_pct', { min: 0 }),
       termos: v.texto(b.termos, 'termos', { max: 4000 }),
       observacoes: v.texto(b.observacoes, 'observacoes', { max: 2000 }),
     };
@@ -93,7 +100,7 @@ function registrar(router, db) {
 
   const CAMPOS = ['cliente_id', 'titulo', 'descricao', 'data', 'validade', 'prazo_entrega', 'subtotal', 'desconto', 'total',
     'forma_pagamento', 'parcelas', 'primeiro_vencimento', 'condicoes', 'observacoes', 'condicoes_titulo', 'categoria', 'prazo_texto',
-    'pagamento_texto', 'termos'];
+    'pagamento_texto', 'termos', 'area', 'parceiro_id', 'comissao_pct'];
 
   const salvarItens = (projetoId, itens) => {
     db.prepare('DELETE FROM projeto_itens WHERE projeto_id = ?').run(projetoId);
@@ -125,9 +132,17 @@ function registrar(router, db) {
         descricao: `${p.titulo} (#${id})`,
         categoria: 'Projetos',
         origem: 'projeto',
+        area: p.area,
         vinculos: { cliente_id: p.cliente_id, projeto_id: id },
         usuarioId,
       });
+    }
+    // Comissão do parceiro que indicou o cliente: vira conta a pagar.
+    if (p.parceiro_id && p.comissao_pct > 0 && p.total > 0) {
+      db.prepare(`INSERT INTO lancamentos (tipo, descricao, categoria, valor, vencimento, origem, cliente_id, projeto_id, area, usuario_id)
+        VALUES ('pagar', ?, 'Comissão de parceiro', ?, ?, 'comissao', ?, ?, ?, ?)`)
+        .run(`Comissão ${String(p.comissao_pct).replace('.', ',')}% — ${p.titulo} (#${id})`, Math.round((p.total * p.comissao_pct) / 100),
+          primeiro, p.parceiro_id, id, p.area, usuarioId);
     }
     db.prepare("UPDATE projetos SET status = 'aprovado', data_aprovacao = ?, primeiro_vencimento = ? WHERE id = ?").run(hoje, primeiro, id);
   };
@@ -204,16 +219,48 @@ function registrar(router, db) {
     const p = buscar(id);
     if (['cancelado', 'recusado'].includes(p.status)) throw erro(409, 'Projeto já encerrado');
     transacao(db, () => {
-      if (p.status !== 'proposta') cancelarParcelas(db, { projetoId: id, origem: 'projeto' });
+      if (p.status !== 'proposta') {
+        cancelarParcelas(db, { projetoId: id, origem: 'projeto' });
+        db.prepare("UPDATE lancamentos SET status = 'cancelado' WHERE projeto_id = ? AND origem = 'comissao' AND status = 'aberto'").run(id);
+      }
       db.prepare("UPDATE projetos SET status = 'cancelado' WHERE id = ?").run(id);
     });
     return buscar(id);
   });
 
+  // Link público do orçamento (para enviar ao cliente por WhatsApp/e-mail).
+  router.post('/api/projetos/:id/link', ({ params }) => {
+    const p = buscar(params.id);
+    let token = p.token_publico;
+    if (!token) {
+      token = crypto.randomBytes(18).toString('base64url');
+      db.prepare('UPDATE projetos SET token_publico = ? WHERE id = ?').run(token, p.id);
+    }
+    return { token, caminho: `/orcamento.html?t=${token}` };
+  });
+
+  router.get('/api/publico/orcamento/:token', ({ params }) => {
+    const token = String(params.token);
+    if (token.length < 20) throw erro(404, 'Orçamento não encontrado');
+    const linha = db.prepare('SELECT id FROM projetos WHERE token_publico = ?').get(token);
+    if (!linha) throw erro(404, 'Orçamento não encontrado');
+    const p = buscar(linha.id);
+    // Somente o que aparece no documento; nada de custos, lucro ou anotações internas.
+    const orcamento = {};
+    for (const k of ['id', 'titulo', 'descricao', 'data', 'validade', 'prazo_entrega', 'subtotal', 'desconto', 'total', 'forma_pagamento',
+      'parcelas', 'condicoes', 'condicoes_titulo', 'categoria', 'prazo_texto', 'pagamento_texto', 'termos', 'cliente_nome',
+      'cliente_fantasia', 'cliente_contato', 'cliente_telefone']) orcamento[k] = p[k];
+    orcamento.itens = p.itens.map(({ descricao, detalhe, medida, quantidade, preco_unitario, subtotal }) => ({ descricao, detalhe, medida, quantidade, preco_unitario, subtotal }));
+    const empresa = lerEmpresa(db);
+    const publico = {};
+    for (const k of ['nome', 'razao_social', 'cnpj', 'telefone', 'email', 'cidade', 'uf', 'logo', 'pix_chave', 'pix_titular', 'dados_bancarios', 'termos_orcamento']) publico[k] = empresa[k];
+    return { orcamento, empresa: publico };
+  }, { publica: true });
+
   // Cria uma nova proposta a partir de um projeto existente (útil para jobs parecidos).
   router.post('/api/projetos/:id/duplicar', (ctx) => {
     const p = buscar(ctx.params.id);
-    const d = ler({ ...p, titulo: `${p.titulo} (cópia)`, data: v.hoje(), validade: null, prazo_entrega: null, primeiro_vencimento: null });
+    const d = ler({ ...p, token_publico: null, titulo: `${p.titulo} (cópia)`, data: v.hoje(), validade: null, prazo_entrega: null, primeiro_vencimento: null });
     const id = transacao(db, () => inserir(d, ctx.usuario.id));
     ctx.status = 201;
     return buscar(id);

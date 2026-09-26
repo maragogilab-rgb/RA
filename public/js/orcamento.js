@@ -2,13 +2,15 @@
 import { h, R$, dataBR, num, ROTULOS, trocar } from './nucleo.js';
 
 const doc = document.getElementById('doc');
-const id = new URLSearchParams(location.search).get('id');
+const params = new URLSearchParams(location.search);
+const id = params.get('id');
+const token = params.get('t');
 
 document.getElementById('imprimir').addEventListener('click', () => window.print());
 
 async function carregar(caminho) {
   const r = await fetch(`/api${caminho}`, { credentials: 'same-origin' });
-  if (r.status === 401) { location.href = '/'; throw new Error('Faça login'); }
+  if (r.status === 401 && !token) { location.href = '/'; throw new Error('Faça login'); }
   const d = await r.json();
   if (!r.ok) throw new Error(d.erro || 'Erro ao carregar');
   return d;
@@ -29,7 +31,8 @@ function prazo(p) {
 
 function render(p, e) {
   document.title = `Orçamento — ${p.cliente_fantasia || p.cliente_nome}`;
-  document.getElementById('voltar').href = `/#/projetos/${p.id}`;
+  if (token) document.getElementById('voltar').remove();
+  else document.getElementById('voltar').href = `/#/projetos/${p.id}`;
   const nomeEmpresa = e.nome || e.razao_social || 'Maragogi Lab';
   const cidade = [e.cidade && `${e.cidade}${e.uf ? `, ${e.uf}` : ''}`, e.telefone].filter(Boolean).join(' · ');
   const termos = (p.termos ?? e.termos_orcamento ?? '').split('\n').map((l) => l.replace(/^[\s–—-]+/, '').trim()).filter(Boolean);
@@ -85,8 +88,14 @@ function render(p, e) {
 
 (async () => {
   try {
-    if (!id) throw new Error('Orçamento não informado');
-    const [p, e] = await Promise.all([carregar(`/projetos/${id}`), carregar('/empresa')]);
+    let p;
+    let e;
+    if (token) {
+      ({ orcamento: p, empresa: e } = await carregar(`/publico/orcamento/${encodeURIComponent(token)}`));
+    } else {
+      if (!id) throw new Error('Orçamento não informado');
+      [p, e] = await Promise.all([carregar(`/projetos/${id}`), carregar('/empresa')]);
+    }
     render(p, e);
     if (new URLSearchParams(location.search).get('imprimir') === '1') setTimeout(() => window.print(), 300);
   } catch (err) {

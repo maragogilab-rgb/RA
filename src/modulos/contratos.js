@@ -10,7 +10,7 @@ function registrar(router, db) {
     if (!r) throw erro(404, 'Contrato não encontrado');
     return r;
   };
-  const CAMPOS = ['cliente_id', 'descricao', 'valor', 'dia_vencimento', 'inicio', 'fim', 'ativo', 'observacoes'];
+  const CAMPOS = ['cliente_id', 'descricao', 'valor', 'dia_vencimento', 'inicio', 'fim', 'ativo', 'observacoes', 'area'];
   const ler = (b) => {
     const d = {
       cliente_id: v.inteiro(b.cliente_id, 'cliente_id', { obrigatorio: true }),
@@ -21,6 +21,7 @@ function registrar(router, db) {
       fim: v.data(b.fim, 'fim'),
       ativo: v.booleano(b.ativo),
       observacoes: v.texto(b.observacoes, 'observacoes', { max: 2000 }),
+      area: v.texto(b.area, 'area', { max: 100 }),
     };
     if (d.dia_vencimento > 28) throw erro(400, 'O dia de vencimento deve ser entre 1 e 28');
     if (d.valor <= 0) throw erro(400, 'O valor deve ser maior que zero');
@@ -71,11 +72,11 @@ function registrar(router, db) {
         AND NOT EXISTS (SELECT 1 FROM lancamentos l WHERE l.contrato_id = contratos.id AND l.competencia = ?)`)
       .all(proximoMes, inicioMes, competencia);
     const [a, m] = competencia.split('-');
-    const ins = db.prepare(`INSERT INTO lancamentos (tipo, descricao, categoria, valor, vencimento, origem, cliente_id, contrato_id, competencia, usuario_id)
-      VALUES ('receber', ?, 'Fee mensal', ?, ?, 'contrato', ?, ?, ?, ?)`);
+    const ins = db.prepare(`INSERT INTO lancamentos (tipo, descricao, categoria, valor, vencimento, origem, cliente_id, contrato_id, competencia, usuario_id, area)
+      VALUES ('receber', ?, 'Fee mensal', ?, ?, 'contrato', ?, ?, ?, ?, ?)`);
     transacao(db, () => {
       for (const c of vigentes) {
-        ins.run(`${c.descricao} - ${m}/${a}`, c.valor, `${competencia}-${String(c.dia_vencimento).padStart(2, '0')}`, c.cliente_id, c.id, competencia, ctx.usuario.id);
+        ins.run(`${c.descricao} - ${m}/${a}`, c.valor, `${competencia}-${String(c.dia_vencimento).padStart(2, '0')}`, c.cliente_id, c.id, competencia, ctx.usuario.id, c.area);
       }
     });
     return { competencia, geradas: vigentes.length, total: vigentes.reduce((s, c) => s + c.valor, 0) };

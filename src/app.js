@@ -24,7 +24,7 @@ const SEGURANCA = {
 
 function criarRouter(db, opcoes) {
   const router = new Router();
-  for (const m of ['sistema', 'cadastros', 'projetos', 'contratos', 'financeiro', 'notas']) {
+  for (const m of ['sistema', 'cadastros', 'projetos', 'contratos', 'financeiro', 'notas', 'agenda']) {
     require(`./modulos/${m}`).registrar(router, db, opcoes);
   }
   return router;
@@ -88,10 +88,19 @@ function criarApp(db, { seguro = false, log = true, fetchNfse, confiarProxy = fa
       ctx.usuario = auth.usuarioDaSessao(db, ctx.token);
       if (!rota.opcoes.publica && !ctx.usuario) throw new ErroHttp(401, 'Sessão expirada. Faça login novamente.');
 
-      if (req.method !== 'GET') ctx.body = await lerCorpo(req);
+      if (req.method !== 'GET') ctx.body = await lerCorpo(req, rota.opcoes.limiteCorpo);
       const resultado = await rota.handler(ctx);
       const headers = ctx.cookies.length ? { 'Set-Cookie': ctx.cookies } : {};
-      if (resultado === undefined) enviarJson(res, 204, null, { ...SEGURANCA, ...headers });
+      // Respostas que não são JSON (calendário .ics, PDF anexado).
+      if (ctx.bruto) {
+        res.writeHead(200, {
+          ...SEGURANCA,
+          'Content-Type': ctx.bruto.tipo,
+          'Cache-Control': 'private, no-store',
+          ...(ctx.bruto.nome ? { 'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(ctx.bruto.nome)}` } : {}),
+        });
+        res.end(ctx.bruto.corpo);
+      } else if (resultado === undefined) enviarJson(res, 204, null, { ...SEGURANCA, ...headers });
       else enviarJson(res, ctx.status, resultado, { ...SEGURANCA, ...headers });
     } catch (e) {
       if (e instanceof ErroHttp) {

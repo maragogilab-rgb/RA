@@ -9,10 +9,12 @@ Roda com **um único comando**, sem dependências externas: apenas Node.js 22+ (
 
 | Módulo | O que faz |
 |---|---|
-| **Painel** | Recebido no mês, receita recorrente (fee), contas a receber/pagar com vencidos, propostas em aberto, gráfico de recebimentos, jobs em andamento com prazos e próximos vencimentos |
+| **Painel** | Lembretes automáticos (orçamento sem resposta, pós-venda, follow-up, DAS do MEI, tarefas atrasadas), metas por área, caixa do mês com reservas de impostos/equipamentos, recebido no mês, receita recorrente (fee), contas a receber/pagar com vencidos, propostas em aberto, gráfico de recebimentos, jobs em andamento com prazos e próximos vencimentos |
 | **Projetos e propostas** | Monte a proposta com os serviços do catálogo (ou itens avulsos), desconto, parcelas e condições, e **imprima para enviar ao cliente**. Quando aprovada, vira job e gera as parcelas a receber. Acompanhe as etapas (Aprovado → Em produção → Em revisão → Entregue), lance **custos do job** (freelancers, locação de equipamento, deslocamento) e veja o **lucro e a margem de cada projeto** |
 | **Contratos (fee)** | Clientes com mensalidade (gestão de redes sociais, tráfego pago…). Um clique gera as cobranças do mês de todos os contratos, sem duplicar |
 | **Notas fiscais** | NFS-e a partir de um projeto, de uma parcela ou de uma mensalidade. O sistema confere os dados e mostra **o que falta para emitir**. Emissão **manual** (portal da prefeitura) ou **automática** (Focus NFe) |
+| **Agenda** | Eventos, gravações e coberturas com data, hora, local, cliente e projeto. Botão "+ Google" por evento e link de assinatura para ver tudo no Google Agenda/celular |
+| **Tarefas** | Tarefas com prazo, prioridade e responsável (você ou o sócio), ligadas a projetos |
 | **Financeiro** | Contas a receber e a pagar, baixa, estorno, vencidos e **fluxo de caixa** mensal |
 | **Clientes** | Todos os dados exigidos na NF: CNPJ/CPF (validado), razão social, inscrição municipal, endereço completo com **preenchimento automático pelo CEP** (inclui o código IBGE do município) e o tipo de serviço contratado |
 | **Serviços** | Catálogo com preço de referência e dados fiscais: item da LC 116, alíquota do ISS, CNAE, código municipal e NBS |

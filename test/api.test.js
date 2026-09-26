@@ -245,6 +245,75 @@ test('nota fiscal: pendências, emissão manual e automática (Focus NFe)', asyn
   assert.match(errada.dados.mensagem, /Alíquota inválida/);
 });
 
+test('agenda, assinatura .ics e tarefas', async () => {
+  assert.equal((await api('POST', '/api/eventos', { titulo: 'X', data: '2026-10-10', hora: '25:00' })).status, 400);
+  const ev = await api('POST', '/api/eventos', { titulo: 'Casamento Ana, praia', tipo: 'Casamento', data: '2026-10-10', hora: '16:30', local: 'Maragogi', cliente_id: clienteId });
+  assert.equal(ev.status, 201);
+  assert.equal(ev.dados.cliente_nome, 'Pousada Mar Azul Ltda');
+  const { dados: { caminho } } = await api('GET', '/api/agenda/assinatura');
+  const r = await fetch(base + caminho);
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /text\/calendar/);
+  const texto = await r.text();
+  assert.match(texto, /SUMMARY:Casamento Ana\\, praia/);
+  assert.match(texto, /DTSTART;TZID=America\/Maceio:20261010T163000/);
+  assert.equal((await fetch(`${base}/api/publico/agenda/errado.ics`)).status, 404);
+
+  const t = await api('POST', '/api/tarefas', { titulo: 'Ligar para cliente', prazo: '2020-01-01', prioridade: 'alta', responsavel_id: 1 });
+  assert.equal(t.status, 201);
+  assert.equal(t.dados.responsavel_nome, 'Administrador');
+  const d = await api('GET', '/api/dashboard');
+  assert.ok(d.dados.lembretes.some((l) => l.tipo === 'tarefa' && l.texto.includes('Ligar para cliente')));
+  assert.equal((await api('POST', `/api/tarefas/${t.dados.id}/feito`, { feito: true })).dados.feito, 1);
+  assert.equal((await api('GET', '/api/tarefas?feito=0')).dados.length, 0);
+});
+
+test('comissão de parceiro, área, link público do orçamento e PDF da nota', async () => {
+  const parceiro = (await api('POST', '/api/clientes', { nome: 'Cerimonial Parceiro', relacao: 'parceiro' })).dados;
+  const prop = (await api('POST', '/api/projetos', {
+    cliente_id: clienteId, titulo: 'Cobertura casamento', area: 'Eventos sociais (casamentos)', parceiro_id: parceiro.id, comissao_pct: 10,
+    observacoes: 'segredo interno', itens: [{ descricao: 'Cobertura', preco_unitario: 300000 }],
+  })).dados;
+  const ap = (await api('POST', `/api/projetos/${prop.id}/aprovar`, {})).dados;
+  assert.equal(ap.receitas[0].area, 'Eventos sociais (casamentos)');
+  assert.equal(ap.custos.length, 1);
+  assert.equal(ap.custos[0].valor, 30000);
+  assert.equal(ap.resumo.lucro, 270000);
+
+  const link = (await api('POST', `/api/projetos/${prop.id}/link`)).dados;
+  assert.equal((await api('POST', `/api/projetos/${prop.id}/link`)).dados.token, link.token);
+  const pub = await (await fetch(`${base}/api/publico/orcamento/${link.token}`)).json();
+  assert.equal(pub.orcamento.total, 300000);
+  const json = JSON.stringify(pub);
+  for (const proibido of ['segredo interno', 'custos', 'resumo', 'receitas', 'nfse_token', 'parceiro']) assert.ok(!json.includes(proibido), proibido);
+  assert.equal((await fetch(`${base}/api/publico/orcamento/${'x'.repeat(24)}`)).status, 404);
+
+  // Cancelar o projeto cancela também a comissão em aberto.
+  const canc = (await api('POST', `/api/projetos/${prop.id}/cancelar`)).dados;
+  assert.ok(canc.custos.every((l) => l.status === 'cancelado'));
+
+  const nota = (await api('POST', '/api/notas', { cliente_id: clienteId, discriminacao: 'x', valor_servicos: 100, item_lista_servico: '17.06' })).dados;
+  assert.equal((await api('POST', `/api/notas/${nota.id}/arquivo`, { nome: 'nf.txt', conteudo: 'data:text/plain;base64,eA==' })).status, 400);
+  const pdf = Buffer.from('%PDF-1.4 teste').toString('base64');
+  const anexo = await api('POST', `/api/notas/${nota.id}/arquivo`, { nome: 'NF 12.pdf', conteudo: `data:application/pdf;base64,${pdf}` });
+  assert.equal(anexo.dados.arquivo_nome, 'NF 12.pdf');
+  const r = await fetch(`${base}/api/notas/${nota.id}/arquivo`, { headers: { Cookie: cookie } });
+  assert.equal(r.headers.get('content-type'), 'application/pdf');
+  assert.equal(await r.text(), '%PDF-1.4 teste');
+  assert.equal((await fetch(`${base}/api/notas/${nota.id}/arquivo`)).status, 401);
+});
+
+test('painel: metas por área e reservas do caixa', async () => {
+  await api('PUT', '/api/empresa', { meta_mensal: 6000, metas_area: { 'Eventos sociais (casamentos)': 5000 }, reserva_imposto_pct: 6, reserva_equip_pct: 5 });
+  assert.equal((await api('PUT', '/api/empresa', { metas_area: '[1,2]' })).status, 400);
+  const d = (await api('GET', '/api/dashboard')).dados;
+  assert.equal(d.metas.mensal, 600000);
+  assert.ok(d.metas.areas.some((a) => a.area === 'Eventos sociais (casamentos)' && a.meta === 500000));
+  assert.equal(d.reservas.imposto, Math.round(d.reservas.recebido * 0.06));
+  assert.equal(d.reservas.disponivel, d.reservas.recebido - d.reservas.despesas - d.reservas.imposto - d.reservas.equipamento);
+  assert.ok((await api('GET', '/api/areas')).dados.includes('Serviços gráficos (impressão, papelaria, sinalização)'));
+});
+
 test('usuários: somente admin gerencia, usuário comum é bloqueado', async () => {
   const u = await api('POST', '/api/usuarios', { nome: 'Sócio', email: 'socio@teste.com', senha: 'curta' });
   assert.equal(u.status, 400);

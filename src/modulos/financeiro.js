@@ -4,15 +4,15 @@ const { erro } = require('../http');
 const v = require('../validar');
 
 // Gera lançamentos parcelados mensais a partir do primeiro vencimento.
-function gerarParcelas(db, { tipo, total, parcelas, primeiroVencimento, descricao, categoria, origem, vinculos = {}, usuarioId = null }) {
+function gerarParcelas(db, { tipo, total, parcelas, primeiroVencimento, descricao, categoria, origem, area = null, vinculos = {}, usuarioId = null }) {
   const valores = v.dividirParcelas(total, parcelas);
   const ins = db.prepare(`
-    INSERT INTO lancamentos (tipo, descricao, categoria, valor, vencimento, origem, cliente_id, fornecedor_id, projeto_id, usuario_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    INSERT INTO lancamentos (tipo, descricao, categoria, valor, vencimento, origem, cliente_id, fornecedor_id, projeto_id, usuario_id, area)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   valores.forEach((valor, i) => {
     const desc = parcelas > 1 ? `${descricao} - parcela ${i + 1}/${parcelas}` : descricao;
     ins.run(tipo, desc, categoria, valor, v.somarMeses(primeiroVencimento, i), origem,
-      vinculos.cliente_id ?? null, vinculos.fornecedor_id ?? null, vinculos.projeto_id ?? null, usuarioId);
+      vinculos.cliente_id ?? null, vinculos.fornecedor_id ?? null, vinculos.projeto_id ?? null, usuarioId, area);
   });
 }
 
@@ -47,6 +47,7 @@ function registrar(router, db) {
       cliente_id: v.inteiro(b.cliente_id, 'cliente_id'),
       fornecedor_id: v.inteiro(b.fornecedor_id, 'fornecedor_id'),
       projeto_id: v.inteiro(b.projeto_id, 'projeto_id'),
+      area: v.texto(b.area, 'area', { max: 100 }),
     };
     if (d.valor <= 0) throw erro(400, 'O valor deve ser maior que zero');
     if (d.projeto_id && !db.prepare('SELECT 1 FROM projetos WHERE id = ?').get(d.projeto_id)) throw erro(400, 'Projeto não encontrado');
@@ -77,10 +78,11 @@ function registrar(router, db) {
   router.post('/api/lancamentos', (ctx) => {
     const d = ler(ctx.body);
     const pagoEm = ctx.body.pago ? (v.data(ctx.body.pago_em, 'pago_em') || v.hoje()) : null;
+    const area = d.area || (d.projeto_id ? db.prepare('SELECT area FROM projetos WHERE id = ?').get(d.projeto_id)?.area : null);
     const r = db.prepare(`INSERT INTO lancamentos (tipo, descricao, categoria, valor, vencimento, cliente_id, fornecedor_id, projeto_id,
-        status, pago_em, valor_pago, usuario_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(d.tipo, d.descricao, d.categoria, d.valor, d.vencimento, d.cliente_id, d.fornecedor_id,
-      d.projeto_id, pagoEm ? 'pago' : 'aberto', pagoEm, pagoEm ? d.valor : null, ctx.usuario.id);
+        status, pago_em, valor_pago, usuario_id, area)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(d.tipo, d.descricao, d.categoria, d.valor, d.vencimento, d.cliente_id, d.fornecedor_id,
+      d.projeto_id, pagoEm ? 'pago' : 'aberto', pagoEm, pagoEm ? d.valor : null, ctx.usuario.id, area);
     ctx.status = 201;
     return buscar(r.lastInsertRowid);
   });
@@ -89,8 +91,8 @@ function registrar(router, db) {
     const atual = buscar(params.id);
     if (atual.status !== 'aberto') throw erro(409, 'Somente lançamentos em aberto podem ser editados');
     const d = ler({ ...body, tipo: atual.tipo });
-    db.prepare(`UPDATE lancamentos SET descricao = ?, categoria = ?, valor = ?, vencimento = ?, cliente_id = ?, fornecedor_id = ? WHERE id = ?`)
-      .run(d.descricao, d.categoria, d.valor, d.vencimento, d.cliente_id ?? atual.cliente_id, d.fornecedor_id ?? atual.fornecedor_id, params.id);
+    db.prepare(`UPDATE lancamentos SET descricao = ?, categoria = ?, valor = ?, vencimento = ?, cliente_id = ?, fornecedor_id = ?, area = ? WHERE id = ?`)
+      .run(d.descricao, d.categoria, d.valor, d.vencimento, d.cliente_id ?? atual.cliente_id, d.fornecedor_id ?? atual.fornecedor_id, d.area ?? atual.area, params.id);
     return buscar(params.id);
   });
 
@@ -113,7 +115,7 @@ function registrar(router, db) {
   router.post('/api/lancamentos/:id/cancelar', ({ params }) => {
     const atual = buscar(params.id);
     if (atual.status !== 'aberto') throw erro(409, 'Somente lançamentos em aberto podem ser cancelados');
-    if (atual.origem === 'projeto') throw erro(409, 'Esta parcela pertence a um projeto aprovado. Cancele o projeto ou ajuste o valor.');
+    if (atual.origem === 'projeto' && atual.tipo === 'receber') throw erro(409, 'Esta parcela pertence a um projeto aprovado. Cancele o projeto ou ajuste o valor.');
     db.prepare("UPDATE lancamentos SET status = 'cancelado' WHERE id = ?").run(params.id);
     return buscar(params.id);
   });

@@ -4,6 +4,7 @@ import {
   paraCentavos, deCentavos, paraNumero, ROTULOS, estado,
 } from './nucleo.js';
 import { novaNotaDe } from './notas.js';
+import { abrirEvento, abrirTarefa } from './agenda.js';
 
 const ETAPAS = ['aprovado', 'producao', 'revisao', 'entregue'];
 const FORMAS = ['pix', 'transferencia', 'boleto', 'cartao', 'dinheiro'];
@@ -56,9 +57,10 @@ export async function lista(raiz) {
 
 // ---------- Editor de proposta ----------
 export async function editor(raiz, { id } = {}) {
-  const [clientes, servicos, proj] = await Promise.all([
-    GET('/clientes?ativo=1'), GET('/servicos?ativo=1'), id ? GET(`/projetos/${id}`) : null,
+  const [clientes, servicos, proj, areas] = await Promise.all([
+    GET('/clientes?ativo=1'), GET('/servicos?ativo=1'), id ? GET(`/projetos/${id}`) : null, GET('/areas'),
   ]);
+  const parceiros = clientes.filter((c) => c.relacao === 'parceiro');
   if (proj && proj.status !== 'proposta') { location.hash = `#/projetos/${id}`; return; }
   const porId = new Map(servicos.map((s) => [s.id, s]));
   const el = (tag, attrs, valor) => { const e = h(tag, attrs); if (valor !== undefined) e.value = valor ?? ''; return e; };
@@ -76,6 +78,12 @@ export async function editor(raiz, { id } = {}) {
   const inDesconto = el('input', { id: 'p-desconto', inputmode: 'decimal', placeholder: '0,00' }, proj?.desconto ? deCentavos(proj.desconto) : '');
   const inCond = el('textarea', { id: 'p-cond', rows: 2, placeholder: 'Ex.: 50% na aprovação e 50% na entrega. Inclui 2 rodadas de ajustes.' }, proj?.condicoes);
   const inObs = el('textarea', { id: 'p-obs', rows: 2, placeholder: 'Anotações internas (não aparecem na proposta)' }, proj?.observacoes);
+  const selArea = h('select', { id: 'p-area' }, h('option', { value: '' }, '—'),
+    areas.map((a) => h('option', { value: a, selected: proj?.area === a }, a)));
+  const selParceiro = h('select', { id: 'p-parceiro' }, h('option', { value: '' }, 'Nenhum'),
+    parceiros.map((c) => h('option', { value: c.id, selected: proj?.parceiro_id === c.id }, c.nome)));
+  const inComissao = el('input', { id: 'p-comissao', type: 'number', min: 0, max: 100, step: 'any' },
+    proj?.comissao_pct ?? (estado.empresa?.comissao_parceiro_pct || 10));
   const inCategoria = el('input', { id: 'p-categoria', list: 'categorias-orc', placeholder: 'Ex.: Locação de itens / Festas' }, proj?.categoria);
   const inPagTexto = el('input', { id: 'p-pagtexto', placeholder: 'Ex.: Pix à vista ou 50% de entrada + 50% na entrega' }, proj?.pagamento_texto);
   const inPrazoTexto = el('input', { id: 'p-prazotexto', placeholder: 'Ex.: 5 dias úteis após aprovação da arte' }, proj?.prazo_texto);
@@ -154,6 +162,8 @@ export async function editor(raiz, { id } = {}) {
         desconto: paraCentavos(inDesconto.value), condicoes: inCond.value, observacoes: inObs.value, itens,
         categoria: inCategoria.value, pagamento_texto: inPagTexto.value, prazo_texto: inPrazoTexto.value,
         condicoes_titulo: inCondTitulo.value, termos: inTermos.value,
+        area: selArea.value, parceiro_id: selParceiro.value ? Number(selParceiro.value) : null,
+        comissao_pct: selParceiro.value ? Number(inComissao.value) || 0 : null,
       };
       const r = proj ? await PUT(`/projetos/${proj.id}`, corpo) : await POST('/projetos', corpo);
       aviso(`Orçamento #${r.id} salvo`);
@@ -170,6 +180,9 @@ export async function editor(raiz, { id } = {}) {
       campo('Cliente', selCliente, 'campo-cheio'),
       campo('Título do projeto', inTitulo),
       campo('Categoria (aparece no topo do orçamento)', inCategoria),
+      campo('Área de negócio (para as metas)', selArea),
+      campo('Indicado por parceiro', selParceiro),
+      campo('Comissão do parceiro (%)', inComissao),
       campo('Descrição / escopo (aparece na proposta)', inDesc, 'campo-cheio'),
       campo('Data da proposta', inData),
       campo('Proposta válida até', inValidade),
@@ -250,7 +263,35 @@ export async function detalhe(raiz, { id }) {
   };
 
   const gerarPdf = () => window.open(`/orcamento.html?id=${p.id}&imprimir=1`, '_blank', 'noopener');
-  const acoes = [btn('Voltar', () => { location.hash = '#/projetos'; }, 'btn-fantasma'), btn('Gerar orçamento (PDF)', gerarPdf, p.status === 'proposta' ? 'btn-primario' : '')];
+  const enviar = async (canal) => {
+    try {
+      const { caminho } = await POST(`/projetos/${p.id}/link`);
+      const url = `${location.origin}${caminho}`;
+      const nome = (p.cliente_contato || p.cliente_fantasia || p.cliente_nome || '').split(/[·@(]/)[0].trim();
+      const texto = `Olá${nome ? ` ${nome}` : ''}, tudo bem? Segue o orçamento "${p.titulo}" da ${estado.empresa?.nome || 'Maragogi Lab'}, `
+        + `no valor de ${R$(p.total)}${p.validade ? `, válido até ${dataBR(p.validade)}` : ''}:\n${url}\n\nQualquer dúvida estou à disposição!`;
+      if (canal === 'whatsapp') {
+        let tel = String(p.cliente_telefone || '').replace(/\D/g, '');
+        if (tel && tel.length <= 11) tel = `55${tel}`;
+        window.open(`https://wa.me/${tel}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
+      } else if (canal === 'email') {
+        location.href = `mailto:${encodeURIComponent(p.cliente_email || '')}?subject=${encodeURIComponent(`Orçamento — ${p.titulo}`)}&body=${encodeURIComponent(texto)}`;
+      } else {
+        await navigator.clipboard.writeText(url);
+        aviso('Link do orçamento copiado');
+      }
+    } catch (e) { aviso(e.message, 'erro'); }
+  };
+  const acoes = [btn('Voltar', () => { location.hash = '#/projetos'; }, 'btn-fantasma'), btn('Gerar orçamento (PDF)', gerarPdf, p.status === 'proposta' ? 'btn-primario' : ''),
+    btn('Enviar ao cliente', () => {
+      const m = modal('Enviar orçamento ao cliente', h('div', { class: 'opcoes-envio' },
+        h('p', { class: 'mudo' }, 'O cliente recebe um link para ver o orçamento (sem precisar de login) e pode salvar em PDF.'),
+        btn('WhatsApp', () => { m.fechar(); enviar('whatsapp'); }, 'btn-primario btn-bloco'),
+        btn('E-mail', () => { m.fechar(); enviar('email'); }, 'btn-bloco'),
+        btn('Copiar link', () => { m.fechar(); enviar('link'); }, 'btn-bloco')));
+    }),
+    btn('Agendar', () => abrirEvento({ titulo: p.titulo, cliente_id: p.cliente_id, projeto_id: p.id, projeto_titulo: p.titulo, data: p.prazo_entrega || hoje() }, () => aviso('Veja em Agenda'))),
+    btn('+ Tarefa', () => abrirTarefa({ projeto_id: p.id, titulo: '' }, () => aviso('Tarefa criada')), 'btn-fantasma')];
   if (p.status === 'proposta') {
     acoes.push(btn('Editar', () => { location.hash = `#/projetos/${id}/editar`; }));
     acoes.push(btn('Recusada', executar(async () => {
@@ -315,7 +356,9 @@ export async function detalhe(raiz, { id }) {
       p.data_aprovacao ? info('Aprovado em', dataBR(p.data_aprovacao)) : null,
       p.data_entrega ? info('Entregue em', dataBR(p.data_entrega)) : null,
       info('Situação', selo(p.status)),
-      info('Pagamento', `${ROTULOS[p.forma_pagamento] || ''}${p.parcelas > 1 ? ` em ${p.parcelas}x` : ' à vista'}`)),
+      info('Pagamento', `${ROTULOS[p.forma_pagamento] || ''}${p.parcelas > 1 ? ` em ${p.parcelas}x` : ' à vista'}`),
+      p.area ? info('Área', p.area) : null,
+      p.parceiro_nome ? info('Indicado por', `${p.parceiro_nome} (${String(p.comissao_pct || 0).replace('.', ',')}%)`) : null),
       p.descricao ? h('div', { class: 'escopo' }, h('h3', {}, 'Escopo'), h('p', {}, p.descricao)) : null),
     h('section', { class: 'cartao' },
       h('h2', { class: 'secao' }, 'Serviços'),

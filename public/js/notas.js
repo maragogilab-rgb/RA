@@ -129,7 +129,7 @@ export async function detalhe(raiz, { id }) {
         { texto: 'Cancelar', acao: () => {} },
         { texto: 'Registrar', classe: 'btn-primario', acao: async () => {
           await POST(`/notas/${id}/registrar`, form.ler());
-          aviso('Nota registrada');
+          aviso('Nota registrada. Agora anexe o PDF baixado do Emissor.');
           estado.recarregar();
         } },
       ],
@@ -165,6 +165,42 @@ export async function detalhe(raiz, { id }) {
     try { await navigator.clipboard.writeText(texto); aviso('Dados copiados. Cole no portal da prefeitura.'); } catch { aviso('Não foi possível copiar', 'erro'); }
   };
 
+  const anexar = () => {
+    const inp = h('input', { type: 'file', accept: 'application/pdf,image/png,image/jpeg' });
+    inp.addEventListener('change', async () => {
+      const f = inp.files[0];
+      if (!f) return;
+      if (f.size > 5 * 1024 * 1024) { aviso('Arquivo maior que 5 MB', 'erro'); return; }
+      const conteudo = await new Promise((ok, falha) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = falha; r.readAsDataURL(f); });
+      try {
+        await POST(`/notas/${id}/arquivo`, { nome: f.name, conteudo });
+        aviso('PDF anexado');
+        estado.recarregar();
+      } catch (e) { aviso(e.message, 'erro'); }
+    });
+    inp.click();
+  };
+
+  // Mensagem a partir do modelo em Configurações ({empresa}, {cliente}, {descricao}, {valor}, {data}, {responsavel}, {whatsapp}).
+  const mensagem = () => {
+    const vars = {
+      empresa: cfg.nome || cfg.razao_social || '', cliente: (n.cliente_contato || n.cliente_nome || '').split(/[·@(]/)[0].trim(),
+      descricao: n.discriminacao.split('\n')[0], valor: R$(n.valor_servicos), data: dataBR(n.data_emissao || hoje()),
+      responsavel: estado.usuario.nome, whatsapp: cfg.telefone || '',
+    };
+    const preencher = (t) => String(t || '').replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
+    return {
+      assunto: preencher(cfg.email_nf_assunto || 'Nota Fiscal — {empresa} · {descricao}'),
+      corpo: preencher(cfg.email_nf_corpo || 'Olá {cliente}, tudo bem?\n\nSegue a nota fiscal referente a "{descricao}", no valor de {valor}, emitida em {data}.\n\nQualquer dúvida, estou à disposição.\n\nAtenciosamente,\n{responsavel}\n{empresa} · {whatsapp}'),
+    };
+  };
+  const enviarEmail = () => {
+    const { assunto, corpo } = mensagem();
+    aviso(n.arquivo_id ? 'Lembre de anexar o PDF da nota no e-mail' : 'Anexe o PDF da nota no e-mail');
+    location.href = `mailto:${encodeURIComponent(n.cliente_email_nf || n.cliente_email || '')}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
+  };
+  const enviarWhats = () => window.open(`https://wa.me/?text=${encodeURIComponent(mensagem().corpo)}`, '_blank', 'noopener');
+
   const acoes = [btn('Voltar', () => { location.hash = '#/notas'; }, 'btn-fantasma')];
   if (editavel) {
     acoes.push(btn('Editar', () => abrirNota(n)));
@@ -185,13 +221,17 @@ export async function detalhe(raiz, { id }) {
   }
   if (n.status === 'processando') acoes.push(btn('Atualizar situação', executar(() => POST(`/notas/${id}/consultar`)), 'btn-primario'));
   if (n.status === 'emitida') {
-    if (n.url_pdf) acoes.push(h('a', { class: 'btn', href: n.url_pdf, target: '_blank', rel: 'noopener' }, 'Abrir PDF'));
+    if (n.arquivo_id) acoes.push(h('a', { class: 'btn', href: `/api/notas/${id}/arquivo`, target: '_blank', rel: 'noopener' }, 'Abrir PDF'));
+    else if (n.url_pdf) acoes.push(h('a', { class: 'btn', href: n.url_pdf, target: '_blank', rel: 'noopener' }, 'Abrir PDF'));
+    acoes.push(btn(n.arquivo_id ? 'Trocar PDF' : 'Anexar PDF', anexar, n.arquivo_id ? 'btn-fantasma' : 'btn-primario'));
+    acoes.push(btn('Enviar por e-mail', enviarEmail));
+    acoes.push(btn('WhatsApp', enviarWhats));
     acoes.push(btn('Cancelar nota', cancelar, 'btn-perigo'));
   }
 
   const info = (rotulo, valor) => h('div', { class: 'info' }, h('span', {}, rotulo), h('strong', {}, valor || '—'));
   trocar(raiz,
-    cabecalho(n.numero ? `NFS-e nº ${n.numero}` : `Nota fiscal (rascunho #${n.id})`, ...acoes),
+    cabecalho(n.numero ? `NFS-e nº ${n.numero}` : n.status === 'rascunho' ? `Nota fiscal (rascunho #${n.id})` : `Nota fiscal #${n.id}`, ...acoes),
     n.pendencias.length ? h('div', { class: 'faixa faixa-info' }, h('strong', {}, 'Faltam dados para emitir:'),
       h('ul', {}, n.pendencias.map((p) => h('li', {}, p.includes('Configurações') ? h('a', { href: '#/configuracoes' }, p)
         : p.startsWith('Cliente') ? h('a', { href: '#/clientes' }, p) : p)))) : null,
@@ -209,7 +249,8 @@ export async function detalhe(raiz, { id }) {
       n.codigo_verificacao ? info('Código de verificação', n.codigo_verificacao) : null,
       n.data_emissao ? info('Emissão', dataBR(n.data_emissao)) : null,
       n.projeto_id ? info('Projeto', h('a', { href: `#/projetos/${n.projeto_id}` }, `#${n.projeto_id} ${n.projeto_titulo || ''}`)) : null,
-      info('Emissão via', n.provedor === 'focusnfe' ? 'Focus NFe (automática)' : 'Portal da prefeitura (manual)')),
+      info('Emissão via', n.provedor === 'focusnfe' ? 'Focus NFe (automática)' : 'Portal / Emissor Nacional (manual)'),
+      n.arquivo_nome ? info('PDF anexado', h('a', { href: `/api/notas/${id}/arquivo`, target: '_blank', rel: 'noopener' }, n.arquivo_nome)) : null),
       h('div', { class: 'escopo' }, h('h3', {}, 'Discriminação'), h('p', {}, n.discriminacao)),
       n.status === 'cancelada' && n.mensagem ? h('p', { class: 'mudo' }, n.mensagem) : null),
   );

@@ -4,6 +4,7 @@ const { erro } = require('../http');
 const auth = require('../auth');
 const v = require('../validar');
 const { importarPainel } = require('../importar');
+const { transacao } = require('../db');
 
 const exigirAdmin = (ctx) => {
   if (ctx.usuario.papel !== 'admin') throw erro(403, 'Acesso restrito a administradores');
@@ -33,7 +34,21 @@ const CAMPOS_EMPRESA = ['nome', 'razao_social', 'cnpj', 'inscricao_municipal', '
   'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'codigo_municipio',
   'aliquota_iss', 'item_lista_servico', 'codigo_tributario_municipio', 'cnae',
   'nfse_provedor', 'nfse_ambiente', 'nfse_token', 'endereco',
-  'termos_orcamento', 'pix_chave', 'pix_titular', 'dados_bancarios', 'logo', 'teto_mei'];
+  'termos_orcamento', 'pix_chave', 'pix_titular', 'dados_bancarios', 'logo', 'teto_mei',
+  // Metas, reservas, lembretes, comissão e modelo de e-mail da NF.
+  'meta_mensal', 'meta_anual', 'metas_area', 'reserva_imposto_pct', 'reserva_equip_pct',
+  'orcamento_parado_dias', 'pos_venda_dias', 'dia_das', 'comissao_parceiro_pct', 'email_nf_assunto', 'email_nf_corpo'];
+
+// Áreas de negócio padrão (as metas por área podem trazer outras).
+const AREAS_PADRAO = ['Corporativo (marcas, shows, eventos)', 'Eventos sociais (casamentos)',
+  'Locação de itens/decoração', 'Serviços gráficos (impressão, papelaria, sinalização)'];
+
+function metasPorArea(empresa) {
+  try {
+    const m = JSON.parse(empresa.metas_area || '{}');
+    return m && typeof m === 'object' && !Array.isArray(m) ? m : {};
+  } catch { return {}; }
+}
 const CAMPO_SECRETO = 'nfse_token';
 
 function registrar(router, db) {
@@ -86,6 +101,9 @@ function registrar(router, db) {
       throw e;
     }
   };
+
+  // Lista reduzida para escolher responsável por tarefas (qualquer usuário logado).
+  router.get('/api/usuarios/nomes', () => db.prepare('SELECT id, nome FROM usuarios WHERE ativo = 1 ORDER BY nome').all());
 
   router.get('/api/usuarios', (ctx) => {
     exigirAdmin(ctx);
@@ -142,6 +160,14 @@ function registrar(router, db) {
 
   router.get('/api/empresa', () => publicarEmpresa());
 
+  // Áreas de negócio usadas em orçamentos, contratos e lançamentos.
+  router.get('/api/areas', () => {
+    const e = lerEmpresa(db);
+    const usadas = db.prepare(`SELECT area FROM projetos WHERE area IS NOT NULL UNION SELECT area FROM lancamentos WHERE area IS NOT NULL
+      UNION SELECT area FROM contratos WHERE area IS NOT NULL`).all().map((r) => r.area);
+    return [...new Set([...Object.keys(metasPorArea(e)), ...AREAS_PADRAO, ...usadas])].filter(Boolean);
+  });
+
   router.put('/api/empresa', (ctx) => {
     exigirAdmin(ctx);
     const b = ctx.body;
@@ -153,16 +179,27 @@ function registrar(router, db) {
     v.opcao(b.nfse_ambiente, 'nfse_ambiente', ['homologacao', 'producao']);
     v.numero(b.aliquota_iss, 'aliquota_iss', { min: 0 });
     const up = db.prepare('INSERT INTO configuracoes (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor');
+    // Valida tudo antes de gravar e grava só os campos enviados (os demais ficam como estão).
+    const gravar = [];
     for (const c of CAMPOS_EMPRESA) {
+      if (b[c] === undefined) continue;
       // Token em branco significa "manter o atual".
       if (c === CAMPO_SECRETO && !b[c]) continue;
-      if ((c === 'endereco' || c === 'logo') && b[c] === undefined) continue;
       if (c === 'logo' && b.logo && !/^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(b.logo)) {
         throw erro(400, 'Logo deve ser uma imagem PNG, JPG, WEBP ou SVG');
       }
-      const max = c === 'logo' ? 700000 : c === 'termos_orcamento' ? 4000 : 500;
-      up.run(`empresa.${c}`, v.texto(b[c], c, { max }) || '');
+      let valor = b[c];
+      if (c === 'metas_area' && valor) {
+        const m = typeof valor === 'string' ? (() => { try { return JSON.parse(valor); } catch { return null; } })() : valor;
+        if (!m || typeof m !== 'object' || Array.isArray(m) || Object.values(m).some((x) => !Number.isFinite(Number(x)))) {
+          throw erro(400, 'Metas por área inválidas');
+        }
+        valor = JSON.stringify(m);
+      }
+      const max = c === 'logo' ? 700000 : ['termos_orcamento', 'metas_area', 'email_nf_corpo'].includes(c) ? 4000 : 500;
+      gravar.push([`empresa.${c}`, v.texto(valor, c, { max }) || '']);
     }
+    transacao(db, () => { for (const [chave, valor] of gravar) up.run(chave, valor); });
     return publicarEmpresa();
   });
 
@@ -181,7 +218,74 @@ function registrar(router, db) {
     const competencia = hoje.slice(0, 7);
     const empresa = lerEmpresa(db);
     const inicioAno = `${hoje.slice(0, 4)}-01-01`;
+    const num = (x, padrao) => (x === '' || x === undefined || x === null || Number.isNaN(Number(x)) ? padrao : Number(x));
+    const fimMes = `${competencia}-31`;
+
+    // Metas: faturamento (receitas não canceladas) por vencimento no mês e no ano.
+    const faturadoArea = db.prepare(`SELECT COALESCE(area, '') AS area, SUM(valor) AS total FROM lancamentos
+      WHERE tipo = 'receber' AND status != 'cancelado' AND vencimento BETWEEN ? AND ? GROUP BY COALESCE(area, '')`).all(inicioMes, fimMes);
+    const metasArea = metasPorArea(empresa);
+    const metas = {
+      mensal: Math.round(num(empresa.meta_mensal, 0) * 100),
+      anual: Math.round(num(empresa.meta_anual, 0) * 100),
+      faturado_mes: faturadoArea.reduce((s2, r) => s2 + r.total, 0),
+      faturado_ano: um("SELECT SUM(valor) FROM lancamentos WHERE tipo = 'receber' AND status != 'cancelado' AND vencimento BETWEEN ? AND ?", `${hoje.slice(0, 4)}-01-01`, `${hoje.slice(0, 4)}-12-31`),
+      areas: [...new Set([...Object.keys(metasArea), ...faturadoArea.map((r) => r.area)])].map((area) => ({
+        area: area || 'Sem área',
+        meta: Math.round(num(metasArea[area], 0) * 100),
+        faturado: faturadoArea.find((r) => r.area === area)?.total || 0,
+      })).filter((a) => a.meta || a.faturado),
+    };
+
+    // Reservas: do que entrou no mês, separa imposto e equipamento; o resto (menos despesas pagas) pode ser retirado.
+    const recebidoMes = um("SELECT SUM(valor_pago) FROM lancamentos WHERE tipo = 'receber' AND status = 'pago' AND pago_em >= ?", inicioMes);
+    const pagoMes = um("SELECT SUM(valor_pago) FROM lancamentos WHERE tipo = 'pagar' AND status = 'pago' AND pago_em >= ?", inicioMes);
+    const pctImp = num(empresa.reserva_imposto_pct, 6);
+    const pctEq = num(empresa.reserva_equip_pct, 5);
+    const reservas = {
+      recebido: recebidoMes,
+      despesas: pagoMes,
+      imposto_pct: pctImp,
+      equipamento_pct: pctEq,
+      imposto: Math.round((recebidoMes * pctImp) / 100),
+      equipamento: Math.round((recebidoMes * pctEq) / 100),
+    };
+    reservas.disponivel = recebidoMes - pagoMes - reservas.imposto - reservas.equipamento;
+
+    // Lembretes automáticos.
+    const lembretes = [];
+    const diasParado = num(empresa.orcamento_parado_dias, 5);
+    for (const p of db.prepare(`SELECT p.id, p.titulo, p.data, c.nome AS cliente FROM projetos p JOIN clientes c ON c.id = p.cliente_id
+      WHERE p.status = 'proposta' AND p.data <= ? ORDER BY p.data LIMIT 10`).all(v.somarDias(hoje, -diasParado))) {
+      lembretes.push({ tipo: 'orcamento', texto: `Orçamento parado desde ${p.data.split('-').reverse().join('/')}: ${p.titulo} (${p.cliente}) — cobrar resposta`, link: `#/projetos/${p.id}` });
+    }
+    const diasPos = num(empresa.pos_venda_dias, 5);
+    for (const p of db.prepare(`SELECT p.id, p.titulo, c.nome AS cliente FROM projetos p JOIN clientes c ON c.id = p.cliente_id
+      WHERE p.status = 'entregue' AND p.data_entrega BETWEEN ? AND ? ORDER BY p.data_entrega LIMIT 10`).all(v.somarDias(hoje, -(diasPos + 3)), v.somarDias(hoje, -diasPos))) {
+      lembretes.push({ tipo: 'pos_venda', texto: `Pós-venda: falar com ${p.cliente} sobre "${p.titulo}" (pedir feedback/indicação)`, link: `#/projetos/${p.id}` });
+    }
+    for (const c of db.prepare(`SELECT id, nome, proximo_contato FROM clientes WHERE ativo = 1 AND proximo_contato IS NOT NULL AND proximo_contato <= ?
+      ORDER BY proximo_contato LIMIT 10`).all(hoje)) {
+      lembretes.push({ tipo: 'follow_up', texto: `Follow-up: ${c.nome}${c.proximo_contato < hoje ? ` (atrasado desde ${c.proximo_contato.split('-').reverse().join('/')})` : ' (hoje)'}`, link: '#/clientes' });
+    }
+    if (empresa.regime_tributario === 'mei') {
+      const diaDas = Math.min(28, Math.max(1, num(empresa.dia_das, 20)));
+      const dia = Number(hoje.slice(8, 10));
+      if (dia <= diaDas && diaDas - dia <= 7) {
+        lembretes.push({ tipo: 'das', texto: `DAS do MEI vence dia ${diaDas}${diaDas === dia ? ' (hoje!)' : ` (em ${diaDas - dia} dia(s))`}`, link: 'https://www8.receita.fazenda.gov.br/SimplesNacional/Aplicacoes/ATSPO/pgmei.app/Identificacao' });
+      }
+    }
+    const tarefasHoje = db.prepare(`SELECT id, titulo, prazo FROM tarefas WHERE feito = 0 AND prazo IS NOT NULL AND prazo <= ? ORDER BY prazo LIMIT 10`).all(hoje);
+    for (const t of tarefasHoje) {
+      lembretes.push({ tipo: 'tarefa', texto: `Tarefa ${t.prazo < hoje ? 'atrasada' : 'para hoje'}: ${t.titulo}`, link: '#/tarefas' });
+    }
+
     return {
+      metas,
+      reservas,
+      lembretes,
+      proximos_eventos: db.prepare(`SELECT e.id, e.titulo, e.tipo, e.data, e.hora, e.local, COALESCE(c.nome, e.cliente_texto) AS cliente_nome
+        FROM eventos e LEFT JOIN clientes c ON c.id = e.cliente_id WHERE e.data BETWEEN ? AND ? ORDER BY e.data, e.hora LIMIT 6`).all(hoje, v.somarDias(hoje, 30)),
       sistema_vazio: um('SELECT COUNT(*) FROM clientes') === 0,
       mei: empresa.regime_tributario === 'mei' ? {
         teto: Math.round(Number(empresa.teto_mei || 81000) * 100),
@@ -274,4 +378,4 @@ function lerEmpresa(db) {
   return out;
 }
 
-module.exports = { registrar, lerEmpresa };
+module.exports = { registrar, lerEmpresa, AREAS_PADRAO };

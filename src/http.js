@@ -48,13 +48,13 @@ class Router {
 
 const LIMITE_CORPO = 1024 * 1024; // 1 MB
 
-function lerCorpo(req) {
+function lerCorpo(req, limite = LIMITE_CORPO) {
   return new Promise((resolve, reject) => {
     let tamanho = 0;
     const partes = [];
     req.on('data', (c) => {
       tamanho += c.length;
-      if (tamanho > LIMITE_CORPO) {
+      if (tamanho > limite) {
         reject(erro(413, 'Requisição muito grande'));
         req.destroy();
         return;

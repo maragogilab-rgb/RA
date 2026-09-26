@@ -45,7 +45,7 @@ function importarPainel(db, dados, usuarioId) {
   if (!dados || dados.tipo !== 'backup-painel-maragogi-lab') {
     throw erro(400, 'Arquivo não reconhecido: esperado um backup do painel Maragogi Lab');
   }
-  const resultado = { clientes: 0, orcamentos: 0, lancamentos: 0, notas: 0, configuracoes: 0, ignorados: 0 };
+  const resultado = { clientes: 0, orcamentos: 0, lancamentos: 0, notas: 0, eventos: 0, tarefas: 0, configuracoes: 0, ignorados: 0 };
 
   const jaImportado = (tabela, idExt) => db.prepare('SELECT id_local FROM ids_externos WHERE origem = ? AND tabela = ? AND id_externo = ?')
     .get(ORIGEM, tabela, String(idExt))?.id_local;
@@ -83,6 +83,18 @@ function importarPainel(db, dados, usuarioId) {
       dados_bancarios: [limpo(c.banco), c.agencia && `Ag. ${c.agencia}`, c.conta && `Conta ${c.conta}`].filter(Boolean).join(' ') || null,
       termos_orcamento: limpo(c.obsPadrao),
       teto_mei: c.tetoMeiAnual ? String(c.tetoMeiAnual) : null,
+      meta_mensal: c.metaMensal ? String(c.metaMensal) : null,
+      meta_anual: c.metaAnual ? String(c.metaAnual) : null,
+      metas_area: c.metasVertical && typeof c.metasVertical === 'object' ? JSON.stringify(c.metasVertical) : null,
+      reserva_imposto_pct: c.reservaImpostoPct !== undefined ? String(c.reservaImpostoPct) : null,
+      reserva_equip_pct: c.reservaEquipPct !== undefined ? String(c.reservaEquipPct) : null,
+      orcamento_parado_dias: c.orcamentoParadoDias ? String(c.orcamentoParadoDias) : null,
+      pos_venda_dias: c.posVendaDiasApos ? String(c.posVendaDiasApos) : null,
+      dia_das: c.diaVencimentoDAS ? String(c.diaVencimentoDAS) : null,
+      comissao_parceiro_pct: c.comissaoParceria !== undefined ? String(c.comissaoParceria) : null,
+      // O modelo antigo usa {empresa}, {cliente}, {descricao}, {valor}, {data}, {responsavel}, {whatsapp}.
+      email_nf_assunto: limpo(c.emailNfAssunto),
+      email_nf_corpo: limpo(c.emailNfCorpo),
     };
     const up = db.prepare(`INSERT INTO configuracoes (chave, valor) VALUES (?, ?)
       ON CONFLICT(chave) DO UPDATE SET valor = CASE WHEN configuracoes.valor = '' OR configuracoes.valor IS NULL THEN excluded.valor ELSE configuracoes.valor END`);
@@ -160,14 +172,20 @@ function importarPainel(db, dados, usuarioId) {
 
     // ---------- Financeiro ----------
     for (const f of dados.financeiro || []) {
-      if (jaImportado('lancamentos', f.id)) { resultado.ignorados++; continue; }
+      const existente = jaImportado('lancamentos', f.id);
+      if (existente) {
+        // Importações antigas não guardavam a área; completa sem duplicar.
+        if (limpo(f.vertical)) db.prepare('UPDATE lancamentos SET area = COALESCE(area, ?) WHERE id = ?').run(limpo(f.vertical), existente);
+        resultado.ignorados++;
+        continue;
+      }
       const tipo = f.tipo === 'despesa' ? 'pagar' : 'receber';
       const pago = ['pago', 'recebido'].includes(f.status);
       const valor = centavos(f.valor);
       if (valor <= 0) { resultado.ignorados++; continue; }
       const data = /^\d{4}-\d{2}-\d{2}$/.test(f.data || '') ? f.data : v.hoje();
       const clienteId = f.clienteId ? mapaCliente.get(f.clienteId) ?? jaImportado('clientes', f.clienteId) ?? null : null;
-      const categoria = [limpo(f.categoria), limpo(f.vertical)].filter(Boolean).join(' · ') || null;
+      const categoria = limpo(f.categoria);
       const semClienteComNota = f.notaEmitida && !clienteId;
       const id = inserir('lancamentos', {
         tipo,
@@ -179,6 +197,7 @@ function importarPainel(db, dados, usuarioId) {
         pago_em: pago ? data : null,
         valor_pago: pago ? valor : null,
         cliente_id: tipo === 'receber' ? clienteId : null,
+        area: limpo(f.vertical),
         usuario_id: usuarioId,
       });
       marcar('lancamentos', f.id, id);
@@ -202,12 +221,44 @@ function importarPainel(db, dados, usuarioId) {
         resultado.notas++;
       }
     }
+
+    // ---------- Agenda ----------
+    for (const e of dados.agenda || []) {
+      if (jaImportado('eventos', e.id)) { resultado.ignorados++; continue; }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(e.data || '')) { resultado.ignorados++; continue; }
+      const nomeCliente = limpo(e.cliente);
+      const cli = nomeCliente ? db.prepare('SELECT id FROM clientes WHERE lower(trim(nome)) = lower(trim(?))').get(nomeCliente) : null;
+      const id = inserir('eventos', {
+        titulo: limpo(e.titulo) || 'Evento',
+        tipo: limpo(e.tipo),
+        data: e.data,
+        hora: /^\d{2}:\d{2}$/.test(e.hora || '') ? e.hora : null,
+        local: limpo(e.local),
+        cliente_id: cli?.id ?? null,
+        cliente_texto: cli ? null : nomeCliente,
+        notas: limpo(e.notas),
+      });
+      marcar('eventos', e.id, id);
+      resultado.eventos++;
+    }
+
+    // ---------- Tarefas ----------
+    for (const t of dados.tarefas || []) {
+      if (jaImportado('tarefas', t.id)) { resultado.ignorados++; continue; }
+      const id = inserir('tarefas', {
+        titulo: limpo(t.titulo) || 'Tarefa',
+        prazo: /^\d{4}-\d{2}-\d{2}$/.test(t.prazo || '') ? t.prazo : null,
+        prioridade: ['alta', 'media', 'baixa'].includes(t.prioridade) ? t.prioridade : 'media',
+        responsavel_id: t.responsavelId === 'eu' ? usuarioId : null,
+        feito: t.feito ? 1 : 0,
+        feito_em: t.feito ? (t.prazo || v.hoje()) : null,
+      });
+      marcar('tarefas', t.id, id);
+      resultado.tarefas++;
+    }
   });
 
-  resultado.nao_importados = {
-    agenda: (dados.agenda || []).length,
-    tarefas: (dados.tarefas || []).length,
-  };
+  resultado.nao_importados = { agenda: 0, tarefas: 0 };
   return resultado;
 }
 

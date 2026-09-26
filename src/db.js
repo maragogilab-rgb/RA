@@ -164,6 +164,47 @@ CREATE TABLE IF NOT EXISTS notas_fiscais (
   criado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Agenda de eventos, gravações e coberturas.
+CREATE TABLE IF NOT EXISTS eventos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  titulo TEXT NOT NULL,
+  tipo TEXT,
+  data TEXT NOT NULL,
+  hora TEXT,
+  local TEXT,
+  cliente_id INTEGER REFERENCES clientes(id),
+  cliente_texto TEXT,
+  projeto_id INTEGER REFERENCES projetos(id),
+  notas TEXT,
+  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS tarefas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  titulo TEXT NOT NULL,
+  prazo TEXT,
+  prioridade TEXT NOT NULL DEFAULT 'media' CHECK (prioridade IN ('alta', 'media', 'baixa')),
+  responsavel_id INTEGER REFERENCES usuarios(id),
+  feito INTEGER NOT NULL DEFAULT 0,
+  feito_em TEXT,
+  projeto_id INTEGER REFERENCES projetos(id),
+  cliente_id INTEGER REFERENCES clientes(id),
+  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Arquivos anexados (ex.: PDF da nota fiscal), guardados no próprio banco.
+CREATE TABLE IF NOT EXISTS arquivos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  nome TEXT NOT NULL,
+  tipo TEXT NOT NULL,
+  tamanho INTEGER NOT NULL,
+  conteudo BLOB NOT NULL,
+  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_eventos_data ON eventos(data);
+CREATE INDEX IF NOT EXISTS idx_tarefas_prazo ON tarefas(feito, prazo);
+
 -- Registro de dados importados de outros sistemas (evita duplicar ao importar de novo).
 CREATE TABLE IF NOT EXISTS ids_externos (
   origem TEXT NOT NULL,
@@ -181,16 +222,24 @@ CREATE INDEX IF NOT EXISTS idx_lanc_status ON lancamentos(tipo, status);
 // Índices que dependem de colunas adicionadas por migração.
 const INDICES_POS_MIGRACAO = `
 CREATE INDEX IF NOT EXISTS idx_lanc_projeto ON lancamentos(projeto_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_projetos_token ON projetos(token_publico) WHERE token_publico IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_lanc_competencia ON lancamentos(contrato_id, competencia) WHERE contrato_id IS NOT NULL;
 `;
 
 // Colunas acrescentadas depois da criação das tabelas; bancos antigos recebem-nas automaticamente.
 const COLUNAS_EXTRAS = {
   lancamentos: {
+    area: 'TEXT',
     origem: "TEXT NOT NULL DEFAULT 'manual'",
     projeto_id: 'INTEGER REFERENCES projetos(id)',
     contrato_id: 'INTEGER REFERENCES contratos(id)',
     competencia: 'TEXT',
+  },
+  contratos: {
+    area: 'TEXT',
+  },
+  notas_fiscais: {
+    arquivo_id: 'INTEGER REFERENCES arquivos(id)',
   },
   // Dados exigidos pela NFS-e para o tomador do serviço.
   clientes: {
@@ -228,6 +277,10 @@ const COLUNAS_EXTRAS = {
   },
   // Campos usados no documento de orçamento.
   projetos: {
+    area: 'TEXT',
+    parceiro_id: 'INTEGER REFERENCES clientes(id)',
+    comissao_pct: 'REAL',
+    token_publico: 'TEXT',
     pagamento_texto: 'TEXT',
     termos: 'TEXT',
     categoria: 'TEXT',

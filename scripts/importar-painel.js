@@ -18,11 +18,8 @@ try {
   const admin = db.prepare("SELECT id FROM usuarios WHERE papel = 'admin' ORDER BY id LIMIT 1").get();
   const r = importarPainel(db, JSON.parse(fs.readFileSync(arquivo, 'utf8')), admin?.id ?? null);
   console.log('Importação concluída:');
-  console.log(`  clientes: ${r.clientes} · orçamentos: ${r.orcamentos} · lançamentos: ${r.lancamentos} · notas: ${r.notas}`);
+  console.log(`  clientes: ${r.clientes} · orçamentos: ${r.orcamentos} · lançamentos: ${r.lancamentos} · notas: ${r.notas} · eventos: ${r.eventos} · tarefas: ${r.tarefas}`);
   if (r.ignorados) console.log(`  ${r.ignorados} registro(s) já importado(s) antes foram ignorados`);
-  if (r.nao_importados.agenda || r.nao_importados.tarefas) {
-    console.log(`  Não importados (sem módulo equivalente): ${r.nao_importados.agenda} evento(s) da agenda, ${r.nao_importados.tarefas} tarefa(s)`);
-  }
 } catch (e) {
   console.error(`Erro: ${e.message}`);
   process.exitCode = 1;

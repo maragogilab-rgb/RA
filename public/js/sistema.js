@@ -127,6 +127,7 @@ export async function painel(raiz) {
       `${d.contratos_sem_cobranca} contrato(s) de fee mensal ainda sem cobrança gerada neste mês. `,
       h('a', { href: '#/contratos' }, 'Gerar cobranças →')) : null,
     d.sistema_vazio && estado.usuario.papel === 'admin' ? primeirosPassos() : null,
+    d.lembretes.length ? cartaoLembretes(d.lembretes) : null,
     d.mei ? medidorMei(d.mei) : null,
     h('div', { class: 'kpis' },
       kpi('Recebido no mês', R$(d.recebido_mes), null, `Saldo do mês: ${R$(d.saldo_mes)}`),
@@ -135,6 +136,8 @@ export async function painel(raiz) {
       kpi('A pagar', R$(d.a_pagar), null, d.pagar_vencido ? `⚠ ${R$(d.pagar_vencido)} vencido` : 'Nada vencido'),
       kpi('Propostas em aberto', R$(d.propostas_abertas.total), null, `${d.propostas_abertas.qtd} aguardando o cliente`)),
     h('div', { class: 'painel-grade' },
+      cartaoMetas(d.metas),
+      cartaoReservas(d.reservas),
       h('section', { class: 'cartao cartao-largo' },
         h('h2', { class: 'secao' }, 'Recebimentos — últimos 6 meses'),
         graficoBarras(serie),
@@ -163,7 +166,15 @@ export async function painel(raiz) {
               h('span', { class: 'cresce' }, l.descricao, l.pessoa ? h('small', { class: 'mudo' }, ` · ${l.pessoa}`) : null),
               h('span', { class: l.vencimento < hj ? 'txt-alerta' : 'mudo' }, dataBR(l.vencimento)),
               h('strong', {}, R$(l.valor))))))
-          : h('p', { class: 'mudo' }, 'Nenhuma conta em aberto.'))),
+          : h('p', { class: 'mudo' }, 'Nenhuma conta em aberto.')),
+      h('section', { class: 'cartao cartao-largo' },
+        h('div', { class: 'secao-topo' }, h('h2', { class: 'secao' }, 'Próximos eventos (30 dias)'), h('a', { href: '#/agenda' }, 'Ver agenda →')),
+        d.proximos_eventos.length
+          ? h('ul', { class: 'lista-simples' }, d.proximos_eventos.map((e) => h('li', {},
+            h('a', { href: '#/agenda' },
+              h('span', { class: e.data === hj ? 'txt-alerta' : 'mudo' }, `${dataBR(e.data)}${e.hora ? ` ${e.hora}` : ''}`),
+              h('span', { class: 'cresce' }, e.titulo, h('small', { class: 'mudo' }, [e.tipo, e.local, e.cliente_nome].filter(Boolean).map((x) => ` · ${x}`).join(''))))))) 
+          : h('p', { class: 'mudo' }, 'Nenhum evento agendado.'))),
   );
 }
 
@@ -176,6 +187,50 @@ function primeirosPassos() {
       h('li', {}, 'Envie sua logo em ', h('a', { href: '#/configuracoes' }, 'Configurações → Orçamento (PDF)'), '.'),
       h('li', {}, 'Crie o acesso do seu sócio em ', h('a', { href: '#/configuracoes' }, 'Configurações → Usuários'), '.')),
     secaoImportar(() => estado.recarregar()));
+}
+
+function cartaoLembretes(lembretes) {
+  const icone = { orcamento: '⏳', pos_venda: '🤝', follow_up: '📞', das: '🧾', tarefa: '☑' };
+  return h('section', { class: 'cartao lembretes' },
+    h('h2', { class: 'secao' }, `Lembretes (${lembretes.length})`),
+    h('ul', { class: 'lista-simples' }, lembretes.map((l) => h('li', {},
+      h('a', { href: l.link, ...(l.link.startsWith('http') ? { target: '_blank', rel: 'noopener' } : {}) },
+        h('span', { 'aria-hidden': 'true' }, icone[l.tipo] || '•'), h('span', { class: 'cresce quebra' }, l.texto))))));
+}
+
+function barra(valor, meta, rotulo) {
+  const pct = meta ? Math.round((valor / meta) * 100) : 0;
+  return h('div', { class: 'meta-linha' },
+    h('div', { class: 'meta-topo' }, h('span', {}, rotulo),
+      h('span', {}, h('strong', {}, R$(valor)), meta ? h('span', { class: 'mudo' }, ` / ${R$(meta)} · ${pct}%`) : h('span', { class: 'mudo' }, ' (sem meta)'))),
+    meta ? h('div', { class: 'barra-progresso', role: 'progressbar', 'aria-valuenow': pct, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': rotulo },
+      h('div', { class: 'feito tom-ok', style: `width:${Math.min(100, pct)}%` })) : null);
+}
+
+function cartaoMetas(m) {
+  if (!m.mensal && !m.anual && !m.areas.length) {
+    return h('section', { class: 'cartao' }, h('h2', { class: 'secao' }, 'Metas'),
+      h('p', { class: 'mudo' }, 'Defina metas mensais e por área em ', h('a', { href: '#/configuracoes' }, 'Configurações'), '.'));
+  }
+  return h('section', { class: 'cartao' },
+    h('h2', { class: 'secao' }, 'Metas de faturamento'),
+    barra(m.faturado_mes, m.mensal, 'Este mês'),
+    m.anual ? barra(m.faturado_ano, m.anual, `Ano ${hoje().slice(0, 4)}`) : null,
+    m.areas.length ? h('h3', { class: 'sub-secao' }, 'Por área (mês)') : null,
+    m.areas.map((a) => barra(a.faturado, a.meta, a.area)),
+    h('small', { class: 'mudo' }, 'Faturamento = cobranças do mês (recebidas ou a receber).'));
+}
+
+function cartaoReservas(r) {
+  const linha = (rotulo, valor, classe) => h('div', { class: `reserva-linha ${classe || ''}` }, h('span', {}, rotulo), h('strong', {}, R$(valor)));
+  return h('section', { class: 'cartao' },
+    h('h2', { class: 'secao' }, 'Caixa do mês e reservas'),
+    linha('Recebido', r.recebido),
+    linha('Despesas pagas', -r.despesas),
+    linha(`Reserva impostos (${String(r.imposto_pct).replace('.', ',')}%)`, -r.imposto),
+    linha(`Reserva equipamentos (${String(r.equipamento_pct).replace('.', ',')}%)`, -r.equipamento),
+    linha('Disponível para retirada', r.disponivel, `total ${r.disponivel < 0 ? 'negativo' : ''}`),
+    h('small', { class: 'mudo' }, 'Percentuais ajustáveis em Configurações.'));
 }
 
 // Faturamento do ano em relação ao teto do MEI.
@@ -326,8 +381,49 @@ export async function configuracoes(raiz) {
     await carregarUsuarios();
   }
 
+  if (admin) secoes.push(await secaoGestao());
   if (admin) secoes.push(secaoImportar());
   trocar(raiz, cabecalho('Configurações'), ...secoes);
+}
+
+// Metas, reservas, lembretes, comissão e modelo de e-mail da NF.
+async function secaoGestao() {
+  const e = estado.empresa || {};
+  const areas = await GET('/areas');
+  let metasArea = {};
+  try { metasArea = JSON.parse(e.metas_area || '{}'); } catch { metasArea = {}; }
+  const form = formulario([
+    { tipo: 'titulo', rotulo: 'Metas de faturamento (R$)' },
+    { nome: 'meta_mensal', rotulo: 'Meta mensal', tipo: 'number' },
+    { nome: 'meta_anual', rotulo: 'Meta anual', tipo: 'number' },
+    ...areas.map((a, i) => ({ nome: `area_${i}`, rotulo: `Meta mensal — ${a}`, tipo: 'number' })),
+    { tipo: 'titulo', rotulo: 'Reservas do caixa (%)', ajuda: '— separadas de cada recebimento' },
+    { nome: 'reserva_imposto_pct', rotulo: 'Impostos (%)', tipo: 'number', placeholder: '6' },
+    { nome: 'reserva_equip_pct', rotulo: 'Equipamentos (%)', tipo: 'number', placeholder: '5' },
+    { tipo: 'titulo', rotulo: 'Lembretes' },
+    { nome: 'orcamento_parado_dias', rotulo: 'Avisar orçamento sem resposta após (dias)', tipo: 'number', placeholder: '5' },
+    { nome: 'pos_venda_dias', rotulo: 'Pós-venda após a entrega (dias)', tipo: 'number', placeholder: '5' },
+    { nome: 'dia_das', rotulo: 'Dia do vencimento do DAS (MEI)', tipo: 'number', placeholder: '20' },
+    { tipo: 'titulo', rotulo: 'Parceiros' },
+    { nome: 'comissao_parceiro_pct', rotulo: 'Comissão padrão do parceiro (%)', tipo: 'number', placeholder: '10' },
+    { tipo: 'titulo', rotulo: 'Mensagem de envio da nota fiscal', ajuda: '— use {cliente}, {descricao}, {valor}, {data}, {empresa}, {responsavel}, {whatsapp}' },
+    { nome: 'email_nf_assunto', rotulo: 'Assunto', largura: 'cheio', placeholder: 'Nota Fiscal — {empresa} · {descricao}' },
+    { nome: 'email_nf_corpo', rotulo: 'Mensagem', tipo: 'textarea', largura: 'cheio' },
+  ], { ...e, ...Object.fromEntries(areas.map((a, i) => [`area_${i}`, metasArea[a] ?? ''])) });
+  form.els.email_nf_corpo.rows = 7;
+  return h('section', { class: 'cartao' },
+    h('h2', { class: 'secao' }, 'Metas, reservas e lembretes'),
+    form.el,
+    btn('Salvar', async () => {
+      try {
+        const d = form.ler();
+        const metas = {};
+        areas.forEach((a, i) => { if (d[`area_${i}`]) metas[a] = d[`area_${i}`]; delete d[`area_${i}`]; });
+        for (const k of Object.keys(d)) if (d[k] === null) d[k] = '';
+        estado.empresa = await PUT('/empresa', { ...d, metas_area: JSON.stringify(metas) });
+        aviso('Configurações salvas');
+      } catch (err) { aviso(err.message, 'erro'); }
+    }, 'btn-primario'));
 }
 
 // Importa o backup JSON do painel antigo.
@@ -344,9 +440,9 @@ function secaoImportar(aoConcluir) {
         const r = await POST('/importar/painel', JSON.parse(await f.text()));
         estado.empresa = await GET('/empresa');
         trocar(resultado, h('div', { class: 'faixa faixa-ok' },
-          `Importado: ${r.clientes} cliente(s), ${r.orcamentos} orçamento(s), ${r.lancamentos} lançamento(s), ${r.notas} nota(s).`,
-          r.ignorados ? ` ${r.ignorados} já existiam.` : '',
-          r.nao_importados.agenda || r.nao_importados.tarefas ? ` Agenda (${r.nao_importados.agenda}) e tarefas (${r.nao_importados.tarefas}) não foram importadas.` : ''));
+          `Importado: ${r.clientes} cliente(s), ${r.orcamentos} orçamento(s), ${r.lancamentos} lançamento(s), ${r.notas} nota(s), `,
+          `${r.eventos} evento(s) e ${r.tarefas} tarefa(s).`,
+          r.ignorados ? ` ${r.ignorados} já existiam e foram mantidos.` : ''));
         aviso('Importação concluída');
         document.querySelectorAll('.marca-nome').forEach((el) => { el.textContent = estado.empresa.nome || 'ERP'; });
         if (aoConcluir) setTimeout(aoConcluir, 1500);

@@ -5,14 +5,14 @@ import {
 import { novaNotaDe } from './notas.js';
 
 const CATEGORIAS = {
-  receber: ['Projetos', 'Fee mensal', 'Outras receitas'],
-  pagar: ['Freelancers', 'Locação de equipamentos', 'Equipamentos', 'Softwares e assinaturas', 'Tráfego pago (mídia)', 'Deslocamento',
+  receber: ['Projetos', 'Fee mensal', 'Evento', 'Gráfica', 'Locação', 'Outras receitas'],
+  pagar: ['Comissão de parceiro', 'Evento', 'Gráfica', 'Freelancers', 'Locação de equipamentos', 'Equipamentos', 'Softwares e assinaturas', 'Tráfego pago (mídia)', 'Deslocamento',
     'Alimentação/Set', 'Aluguel', 'Água/Luz/Internet', 'Impostos', 'Pró-labore', 'Contabilidade', 'Outros'],
 };
 
 export async function financeiro(raiz, params = {}) {
   const tipo = params.tipo === 'pagar' ? 'pagar' : 'receber';
-  const [clientes, fornecedores] = await Promise.all([GET('/clientes?ativo=1'), GET('/fornecedores?ativo=1')]);
+  const [clientes, fornecedores, areas] = await Promise.all([GET('/clientes?ativo=1'), GET('/fornecedores?ativo=1'), GET('/areas')]);
   const area = h('div');
   const f = filtros([
     { nome: 'busca', rotulo: 'Buscar descrição, categoria, cliente…' },
@@ -90,8 +90,9 @@ export async function financeiro(raiz, params = {}) {
       { nome: 'descricao', rotulo: 'Descrição', obrigatorio: true, largura: 'cheio', max: 300 },
       { nome: 'valor', rotulo: 'Valor (R$)', tipo: 'moeda', obrigatorio: true },
       { nome: 'vencimento', rotulo: 'Vencimento', tipo: 'date', padrao: hoje(), obrigatorio: true },
-      { nome: 'categoria', rotulo: 'Categoria', tipo: 'select', opcoes: [['', '—'], ...CATEGORIAS[tipo].map((c) => [c, c])] },
+      { nome: 'categoria', rotulo: 'Categoria', tipo: 'select', opcoes: [['', '—'], ...[...new Set([...CATEGORIAS[tipo], ...(l.categoria ? [l.categoria] : [])])].map((c) => [c, c])] },
       pessoas,
+      { nome: 'area', rotulo: 'Área de negócio', tipo: 'select', largura: 'cheio', opcoes: [['', '—'], ...areas.map((a) => [a, a])] },
     ], l);
     modal(l.id ? 'Editar lançamento' : `Nova conta a ${tipo}`, form.el, {
       acoes: [

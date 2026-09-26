@@ -73,6 +73,13 @@ function somarMeses(dataStr, meses) {
   return alvo.toISOString().slice(0, 10);
 }
 
+// Soma (ou subtrai) dias a uma data AAAA-MM-DD.
+function somarDias(dataStr, dias) {
+  const d = new Date(`${dataStr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
 // Divide um valor em n parcelas; a diferença de centavos vai para a primeira.
 function dividirParcelas(total, n) {
   const base = Math.floor(total / n);
@@ -109,4 +116,4 @@ function documentoValido(doc) {
 
 const soDigitos = (v) => (v ? String(v).replace(/\D/g, '') : null);
 
-module.exports = { documentoValido, soDigitos, texto, numero, inteiro, centavos, data, opcao, booleano, hoje, somarMeses, dividirParcelas };
+module.exports = { documentoValido, soDigitos, texto, numero, inteiro, centavos, data, opcao, booleano, hoje, somarMeses, somarDias, dividirParcelas };

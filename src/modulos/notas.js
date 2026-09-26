@@ -40,7 +40,9 @@ function registrar(router, db, opcoes = {}) {
   const buscarCliente = (id) => db.prepare('SELECT * FROM clientes WHERE id = ?').get(id);
   const buscar = (id) => {
     const n = db.prepare(`
-      SELECT n.*, c.nome AS cliente_nome, c.documento AS cliente_documento, p.titulo AS projeto_titulo, s.nome AS servico_nome
+      SELECT n.*, c.nome AS cliente_nome, c.documento AS cliente_documento, c.email AS cliente_email, c.email_nf AS cliente_email_nf,
+        c.contato AS cliente_contato, p.titulo AS projeto_titulo, s.nome AS servico_nome,
+        (SELECT nome FROM arquivos a WHERE a.id = n.arquivo_id) AS arquivo_nome
       FROM notas_fiscais n JOIN clientes c ON c.id = n.cliente_id
       LEFT JOIN projetos p ON p.id = n.projeto_id LEFT JOIN servicos s ON s.id = n.servico_id
       WHERE n.id = ?`).get(id);
@@ -208,6 +210,27 @@ function registrar(router, db, opcoes = {}) {
       mensagem: null,
     });
     return buscar(n.id);
+  });
+
+  // PDF da nota emitida, guardado no banco (base64 no corpo JSON; até 5 MB).
+  router.post('/api/notas/:id/arquivo', ({ params, body }) => {
+    const n = buscar(params.id);
+    const nome = v.texto(body.nome, 'nome', { obrigatorio: true, max: 200 });
+    const m = /^data:(application\/pdf|image\/(?:png|jpeg));base64,([A-Za-z0-9+/=]+)$/.exec(String(body.conteudo || ''));
+    if (!m) throw erro(400, 'Envie um arquivo PDF, PNG ou JPG');
+    const bytes = Buffer.from(m[2], 'base64');
+    if (bytes.length > 5 * 1024 * 1024) throw erro(413, 'Arquivo maior que 5 MB');
+    const r = db.prepare('INSERT INTO arquivos (nome, tipo, tamanho, conteudo) VALUES (?, ?, ?, ?)').run(nome, m[1], bytes.length, bytes);
+    if (n.arquivo_id) db.prepare('DELETE FROM arquivos WHERE id = ?').run(n.arquivo_id);
+    atualizar(n.id, { arquivo_id: Number(r.lastInsertRowid) });
+    return buscar(n.id);
+  }, { limiteCorpo: 8 * 1024 * 1024 });
+
+  router.get('/api/notas/:id/arquivo', (ctx) => {
+    const n = buscar(ctx.params.id);
+    const a = n.arquivo_id && db.prepare('SELECT * FROM arquivos WHERE id = ?').get(n.arquivo_id);
+    if (!a) throw erro(404, 'Nenhum arquivo anexado');
+    ctx.bruto = { tipo: a.tipo, nome: a.nome, corpo: Buffer.from(a.conteudo) };
   });
 
   router.post('/api/notas/:id/cancelar', async ({ params, body }) => {

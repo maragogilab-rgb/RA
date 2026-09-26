@@ -3,6 +3,7 @@ import * as cad from './cadastros.js';
 import * as proj from './projetos.js';
 import * as ctr from './contratos.js';
 import * as nf from './notas.js';
+import * as ag from './agenda.js';
 import * as fin from './financeiro.js';
 import * as sis from './sistema.js';
 
@@ -13,6 +14,8 @@ const ROTAS = [
   [/^projetos\/(?<id>\d+)\/editar$/, proj.editor],
   [/^projetos\/(?<id>\d+)$/, proj.detalhe],
   [/^contratos$/, ctr.contratos],
+  [/^agenda$/, ag.agenda],
+  [/^tarefas$/, ag.tarefas],
   [/^notas$/, nf.lista],
   [/^notas\/(?<id>\d+)$/, nf.detalhe],
   [/^financeiro(?:\/(?<tipo>receber|pagar))?$/, fin.financeiro],
@@ -27,6 +30,8 @@ const ROTAS = [
 const MENU = [
   ['', 'Painel', '◧'],
   ['projetos', 'Orçamentos e projetos', '◈'],
+  ['agenda', 'Agenda', '◷'],
+  ['tarefas', 'Tarefas', '☑'],
   ['contratos', 'Contratos (fee)', '↻'],
   ['notas', 'Notas fiscais', '▤'],
   ['financeiro', 'Financeiro', '◎'],

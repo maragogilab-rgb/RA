@@ -226,7 +226,7 @@ export function formulario(campos, valores = {}) {
 // colunas: [{titulo, valor: (linha) => texto|Node, csv?: (linha) => texto, classe}]
 export function tabela(colunas, linhas, { vazio = 'Nenhum registro encontrado.', aoClicar, nomeArquivo } = {}) {
   const corpo = linhas.length
-    ? linhas.map((l) => h('tr', { class: aoClicar ? 'clicavel' : null, onclick: aoClicar ? (e) => { if (!e.target.closest('button')) aoClicar(l); } : null },
+    ? linhas.map((l) => h('tr', { class: aoClicar ? 'clicavel' : null, onclick: aoClicar ? (e) => { if (!e.target.closest('button, input, a, select, label')) aoClicar(l); } : null },
       colunas.map((c) => h('td', { class: c.classe, 'data-rotulo': c.titulo }, c.valor(l)))))
     : [h('tr', {}, h('td', { colspan: colunas.length, class: 'vazio' }, vazio))];
   const t = h('div', { class: 'tabela-wrap' },

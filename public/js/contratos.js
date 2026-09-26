@@ -5,7 +5,7 @@ import {
 } from './nucleo.js';
 
 export async function contratos(raiz) {
-  const clientes = await GET('/clientes?ativo=1');
+  const [clientes, areas] = await Promise.all([GET('/clientes?ativo=1'), GET('/areas')]);
   const area = h('div');
   const f = filtros([
     { nome: 'ativo', tipo: 'select', rotulo: 'Situação', padrao: '1', opcoes: [['1', 'Ativos'], ['0', 'Encerrados'], ['', 'Todos']] },
@@ -39,6 +39,7 @@ export async function contratos(raiz) {
       { nome: 'dia_vencimento', rotulo: 'Dia do vencimento (1 a 28)', tipo: 'number', padrao: 10 },
       { nome: 'inicio', rotulo: 'Início', tipo: 'date', padrao: hoje(), obrigatorio: true },
       { nome: 'fim', rotulo: 'Fim (vazio = indeterminado)', tipo: 'date' },
+      { nome: 'area', rotulo: 'Área de negócio', tipo: 'select', largura: 'cheio', opcoes: [['', '—'], ...areas.map((a) => [a, a])] },
       { nome: 'observacoes', rotulo: 'Observações', tipo: 'textarea', largura: 'cheio' },
       { nome: 'ativo', rotulo: 'Ativo', tipo: 'checkbox' },
     ], c);

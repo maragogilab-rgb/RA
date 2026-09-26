@@ -337,3 +337,33 @@ td.acoes-linha { text-align: right; white-space: nowrap; }
 .barra-progresso .feito.tom-critico { background: var(--critico); }
 .boas-vindas { border-color: var(--acento); }
 .boas-vindas ol { margin: 0 0 16px; padding-left: 20px; line-height: 1.8; }
+
+/* ---------- Agenda e tarefas ---------- */
+.agenda-lista { list-style: none; margin: 0; padding: 0; }
+.agenda-lista li { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--borda); }
+.agenda-lista li:last-child { border-bottom: 0; }
+.agenda-lista li.passado { opacity: .6; }
+.agenda-lista li.hoje .agenda-dia { background: var(--acento); color: #fff; }
+.agenda-dia { flex: none; width: 48px; height: 52px; border-radius: 10px; background: var(--acento-suave); color: var(--acento-forte);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+.agenda-dia strong { font-size: 18px; }
+.agenda-dia small { font-size: 11px; text-transform: uppercase; }
+.agenda-info { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 0; font: inherit; color: var(--texto); cursor: pointer;
+  display: flex; flex-direction: column; gap: 2px; }
+.agenda-info:hover strong { color: var(--acento); }
+.agenda-info small { color: var(--acento); }
+.vazio-bloco { padding: 32px; text-align: center; }
+.passos { padding-left: 20px; line-height: 1.8; }
+.col-check { width: 36px; }
+.riscado { text-decoration: line-through; color: var(--texto-3); }
+
+/* ---------- Painel: lembretes, metas, reservas ---------- */
+.lembretes { border-left: 4px solid #eda100; }
+.quebra { white-space: normal; }
+.meta-linha { margin-bottom: 12px; }
+.meta-topo { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; margin-bottom: 4px; flex-wrap: wrap; }
+.sub-secao { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--texto-3); margin: 16px 0 8px; }
+.reserva-linha { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--borda); font-variant-numeric: tabular-nums; }
+.reserva-linha.total { border-bottom: 0; border-top: 2px solid var(--borda); margin-top: 4px; padding-top: 10px; font-size: 16px; }
+.reserva-linha.negativo strong { color: var(--critico); }
+.opcoes-envio { display: flex; flex-direction: column; gap: 10px; }
