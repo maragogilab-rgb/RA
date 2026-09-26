@@ -335,3 +335,5 @@ td.acoes-linha { text-align: right; white-space: nowrap; }
 .barra-progresso .feito.tom-ok { background: var(--serie-1); }
 .barra-progresso .feito.tom-aviso { background: #eda100; }
 .barra-progresso .feito.tom-critico { background: var(--critico); }
+.boas-vindas { border-color: var(--acento); }
+.boas-vindas ol { margin: 0 0 16px; padding-left: 20px; line-height: 1.8; }

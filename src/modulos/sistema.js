@@ -37,9 +37,12 @@ const CAMPOS_EMPRESA = ['nome', 'razao_social', 'cnpj', 'inscricao_municipal', '
 const CAMPO_SECRETO = 'nfse_token';
 
 function registrar(router, db) {
+  // Verificação de funcionamento usada pela hospedagem.
+  router.get('/api/saude', () => ({ ok: true }), { publica: true });
+
   // ---------- Autenticação ----------
   router.post('/api/login', (ctx) => {
-    const ip = ctx.req.socket.remoteAddress || '?';
+    const ip = ctx.ip;
     verificarLimite(ip);
     const email = v.texto(ctx.body.email, 'email', { obrigatorio: true });
     const senha = v.texto(ctx.body.senha, 'senha', { obrigatorio: true, max: 200 });
@@ -179,6 +182,7 @@ function registrar(router, db) {
     const empresa = lerEmpresa(db);
     const inicioAno = `${hoje.slice(0, 4)}-01-01`;
     return {
+      sistema_vazio: um('SELECT COUNT(*) FROM clientes') === 0,
       mei: empresa.regime_tributario === 'mei' ? {
         teto: Math.round(Number(empresa.teto_mei || 81000) * 100),
         faturado_ano: um("SELECT SUM(valor_pago) FROM lancamentos WHERE tipo = 'receber' AND status = 'pago' AND pago_em >= ?", inicioAno),

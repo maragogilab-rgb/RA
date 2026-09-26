@@ -47,7 +47,7 @@ function servirEstatico(req, res, caminho) {
 }
 
 // opcoes.fetchNfse permite substituir a chamada HTTP à API de NFS-e (usado nos testes).
-function criarApp(db, { seguro = false, log = true, fetchNfse } = {}) {
+function criarApp(db, { seguro = false, log = true, fetchNfse, confiarProxy = false } = {}) {
   const router = criarRouter(db, { fetchNfse });
 
   return async function app(req, res) {
@@ -70,6 +70,8 @@ function criarApp(db, { seguro = false, log = true, fetchNfse } = {}) {
       cookies: [],
       status: 200,
       seguro,
+      // Atrás de um proxy (hospedagem), o IP real do visitante vem no cabeçalho X-Forwarded-For.
+      ip: (confiarProxy && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || '?',
     };
     const inicio = Date.now();
     try {

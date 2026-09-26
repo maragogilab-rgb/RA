@@ -126,6 +126,7 @@ export async function painel(raiz) {
     d.contratos_sem_cobranca ? h('div', { class: 'faixa faixa-info', role: 'status' },
       `${d.contratos_sem_cobranca} contrato(s) de fee mensal ainda sem cobrança gerada neste mês. `,
       h('a', { href: '#/contratos' }, 'Gerar cobranças →')) : null,
+    d.sistema_vazio && estado.usuario.papel === 'admin' ? primeirosPassos() : null,
     d.mei ? medidorMei(d.mei) : null,
     h('div', { class: 'kpis' },
       kpi('Recebido no mês', R$(d.recebido_mes), null, `Saldo do mês: ${R$(d.saldo_mes)}`),
@@ -164,6 +165,17 @@ export async function painel(raiz) {
               h('strong', {}, R$(l.valor))))))
           : h('p', { class: 'mudo' }, 'Nenhuma conta em aberto.'))),
   );
+}
+
+// Exibido enquanto o sistema não tem clientes: importa o backup do painel antigo pelo navegador.
+function primeirosPassos() {
+  return h('section', { class: 'cartao boas-vindas' },
+    h('h2', { class: 'secao' }, 'Bem-vindo! Vamos trazer seus dados'),
+    h('ol', {},
+      h('li', {}, 'Importe o backup do painel antigo (arquivo .json) — clientes, orçamentos, financeiro e dados da empresa.'),
+      h('li', {}, 'Envie sua logo em ', h('a', { href: '#/configuracoes' }, 'Configurações → Orçamento (PDF)'), '.'),
+      h('li', {}, 'Crie o acesso do seu sócio em ', h('a', { href: '#/configuracoes' }, 'Configurações → Usuários'), '.')),
+    secaoImportar(() => estado.recarregar()));
 }
 
 // Faturamento do ano em relação ao teto do MEI.
@@ -319,11 +331,11 @@ export async function configuracoes(raiz) {
 }
 
 // Importa o backup JSON do painel antigo.
-function secaoImportar() {
+function secaoImportar(aoConcluir) {
   const arq = h('input', { type: 'file', accept: 'application/json,.json', id: 'backup-arquivo' });
   const resultado = h('div');
-  return h('section', { class: 'cartao' },
-    h('h2', { class: 'secao' }, 'Importar dados do painel antigo'),
+  return h(aoConcluir ? 'div' : 'section', { class: aoConcluir ? '' : 'cartao' },
+    aoConcluir ? null : h('h2', { class: 'secao' }, 'Importar dados do painel antigo'),
     h('p', { class: 'mudo' }, 'Selecione o arquivo de backup (.json) exportado do painel Maragogi Lab. Clientes, orçamentos, financeiro e configurações são importados; o que já foi importado antes é ignorado.'),
     h('div', { class: 'linha-logo' }, arq, btn('Importar', async () => {
       const f = arq.files[0];
@@ -336,6 +348,8 @@ function secaoImportar() {
           r.ignorados ? ` ${r.ignorados} já existiam.` : '',
           r.nao_importados.agenda || r.nao_importados.tarefas ? ` Agenda (${r.nao_importados.agenda}) e tarefas (${r.nao_importados.tarefas}) não foram importadas.` : ''));
         aviso('Importação concluída');
+        document.querySelectorAll('.marca-nome').forEach((el) => { el.textContent = estado.empresa.nome || 'ERP'; });
+        if (aoConcluir) setTimeout(aoConcluir, 1500);
       } catch (e) {
         aviso(e instanceof SyntaxError ? 'Arquivo JSON inválido' : e.message, 'erro');
       }

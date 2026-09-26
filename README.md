@@ -24,6 +24,10 @@ Funciona no computador e no celular, com tema claro e escuro.
 
 ## Como usar
 
+**Na internet (recomendado, para você e seu sócio):** siga o passo a passo em [COLOCAR-NO-AR.md](COLOCAR-NO-AR.md).
+
+**No próprio computador:**
+
 ```bash
 npm run demo   # opcional: carrega dados de exemplo da agência
 npm start      # inicia o sistema
