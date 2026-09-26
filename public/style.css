@@ -321,3 +321,17 @@ td.acoes-linha { text-align: right; white-space: nowrap; }
   .cabecalho-impressao { border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 16px; }
   .cabecalho-impressao strong { font-size: 18px; }
 }
+
+/* ---------- Orçamento / configurações ---------- */
+.tabela-itens input.sub { margin-top: 4px; font-size: 13px; color: var(--texto-2); }
+.linha-logo { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.linha-logo input[type="file"] { width: auto; flex: 1 1 220px; }
+.previa-logo { width: 56px; height: 56px; object-fit: contain; border: 1px solid var(--borda); border-radius: 8px; background: #fff; }
+.previa-logo[hidden] { display: none; }
+.medidor-mei .secao-topo { margin-bottom: 8px; }
+.barra-progresso { position: relative; height: 10px; border-radius: 999px; background: var(--superficie-2); overflow: hidden; margin-bottom: 6px; }
+.barra-progresso > div { position: absolute; inset: 0 auto 0 0; border-radius: 999px; }
+.barra-progresso .previsto { background: var(--acento-suave); }
+.barra-progresso .feito.tom-ok { background: var(--serie-1); }
+.barra-progresso .feito.tom-aviso { background: #eda100; }
+.barra-progresso .feito.tom-critico { background: var(--critico); }

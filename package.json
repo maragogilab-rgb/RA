@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server.js",
+    "importar": "node --disable-warning=ExperimentalWarning scripts/importar-painel.js",
     "demo": "node --disable-warning=ExperimentalWarning scripts/dados-demo.js",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
   },

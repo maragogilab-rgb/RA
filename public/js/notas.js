@@ -97,7 +97,11 @@ export async function lista(raiz) {
   }
 
   const cfg = estado.empresa || {};
-  const modo = cfg.nfse_provedor === 'focusnfe' && cfg.nfse_token_configurado
+  const modo = cfg.regime_tributario === 'mei' && cfg.nfse_provedor !== 'focusnfe'
+    ? h('div', { class: 'faixa faixa-info' }, 'MEI: emita a NFS-e no Emissor Nacional (',
+      h('a', { href: 'https://www.nfse.gov.br/EmissorNacional', target: '_blank', rel: 'noopener' }, 'nfse.gov.br/EmissorNacional'),
+      '). Aqui o sistema prepara os dados — use "Copiar dados" — e depois você registra o número da nota. Como MEI, o ISS já é pago no DAS: não é preciso informar alíquota.')
+    : cfg.nfse_provedor === 'focusnfe' && cfg.nfse_token_configurado
     ? h('div', { class: 'faixa faixa-ok' }, `Emissão automática ativa (Focus NFe — ${cfg.nfse_ambiente === 'producao' ? 'PRODUÇÃO' : 'homologação/teste'}).`)
     : h('div', { class: 'faixa faixa-info' }, 'Modo manual: o sistema prepara os dados da nota, você emite no portal da prefeitura e registra o número aqui. ',
       estado.usuario.papel === 'admin' ? h('a', { href: '#/configuracoes' }, 'Configurar emissão automática →') : null);

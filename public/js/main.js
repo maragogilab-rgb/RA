@@ -26,11 +26,11 @@ const ROTAS = [
 
 const MENU = [
   ['', 'Painel', '◧'],
-  ['projetos', 'Projetos e propostas', '◈'],
+  ['projetos', 'Orçamentos e projetos', '◈'],
   ['contratos', 'Contratos (fee)', '↻'],
   ['notas', 'Notas fiscais', '▤'],
   ['financeiro', 'Financeiro', '◎'],
-  ['clientes', 'Clientes', '◉'],
+  ['clientes', 'Clientes e leads', '◉'],
   ['servicos', 'Serviços', '▦'],
   ['fornecedores', 'Fornecedores', '◍'],
   ['relatorios', 'Relatórios', '▥'],

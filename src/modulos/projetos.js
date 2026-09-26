@@ -13,7 +13,8 @@ const STATUS = ['proposta', ...ETAPAS, 'recusado', 'cancelado'];
 function registrar(router, db) {
   const buscar = (id) => {
     const p = db.prepare(`
-      SELECT p.*, c.nome AS cliente_nome, c.documento AS cliente_documento, c.email AS cliente_email, c.telefone AS cliente_telefone
+      SELECT p.*, c.nome AS cliente_nome, c.nome_fantasia AS cliente_fantasia, c.documento AS cliente_documento,
+        c.email AS cliente_email, c.telefone AS cliente_telefone, c.contato AS cliente_contato
       FROM projetos p JOIN clientes c ON c.id = p.cliente_id
       WHERE p.id = ?`).get(id);
     if (!p) throw erro(404, 'Projeto não encontrado');
@@ -55,7 +56,11 @@ function registrar(router, db) {
       const quantidade = v.numero(it.quantidade, `itens[${i}].quantidade`, { min: 0, padrao: 1 });
       if (quantidade <= 0) throw erro(400, 'A quantidade dos itens deve ser maior que zero');
       const preco = v.centavos(it.preco_unitario, `itens[${i}].preco_unitario`, { padrao: servico?.preco ?? 0 });
-      return { servico_id: servicoId, descricao, quantidade, preco_unitario: preco, subtotal: Math.round(quantidade * preco) };
+      return {
+        servico_id: servicoId, descricao, quantidade, preco_unitario: preco, subtotal: Math.round(quantidade * preco),
+        detalhe: v.texto(it.detalhe, `itens[${i}].detalhe`, { max: 500 }),
+        medida: v.texto(it.medida, `itens[${i}].medida`, { max: 50 }),
+      };
     });
     const subtotal = itens.reduce((s, it) => s + it.subtotal, 0);
     const desconto = v.centavos(b.desconto, 'desconto', { padrao: 0 });
@@ -77,17 +82,24 @@ function registrar(router, db) {
       parcelas,
       primeiro_vencimento: v.data(b.primeiro_vencimento, 'primeiro_vencimento'),
       condicoes: v.texto(b.condicoes, 'condicoes', { max: 2000 }),
+      condicoes_titulo: v.texto(b.condicoes_titulo, 'condicoes_titulo', { max: 60 }),
+      categoria: v.texto(b.categoria, 'categoria', { max: 100 }),
+      prazo_texto: v.texto(b.prazo_texto, 'prazo_texto', { max: 200 }),
+      pagamento_texto: v.texto(b.pagamento_texto, 'pagamento_texto', { max: 200 }),
+      termos: v.texto(b.termos, 'termos', { max: 4000 }),
       observacoes: v.texto(b.observacoes, 'observacoes', { max: 2000 }),
     };
   };
 
   const CAMPOS = ['cliente_id', 'titulo', 'descricao', 'data', 'validade', 'prazo_entrega', 'subtotal', 'desconto', 'total',
-    'forma_pagamento', 'parcelas', 'primeiro_vencimento', 'condicoes', 'observacoes'];
+    'forma_pagamento', 'parcelas', 'primeiro_vencimento', 'condicoes', 'observacoes', 'condicoes_titulo', 'categoria', 'prazo_texto',
+    'pagamento_texto', 'termos'];
 
   const salvarItens = (projetoId, itens) => {
     db.prepare('DELETE FROM projeto_itens WHERE projeto_id = ?').run(projetoId);
-    const ins = db.prepare('INSERT INTO projeto_itens (projeto_id, servico_id, descricao, quantidade, preco_unitario, subtotal) VALUES (?, ?, ?, ?, ?, ?)');
-    for (const it of itens) ins.run(projetoId, it.servico_id, it.descricao, it.quantidade, it.preco_unitario, it.subtotal);
+    const ins = db.prepare(`INSERT INTO projeto_itens (projeto_id, servico_id, descricao, detalhe, medida, quantidade, preco_unitario, subtotal)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const it of itens) ins.run(projetoId, it.servico_id, it.descricao, it.detalhe, it.medida, it.quantidade, it.preco_unitario, it.subtotal);
   };
 
   const inserir = (d, usuarioId) => {

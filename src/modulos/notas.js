@@ -14,7 +14,9 @@ function pendencias(empresa, cliente, nota) {
   const falta = (cond, msg) => { if (!cond) p.push(msg); };
   falta(empresa.cnpj && v.documentoValido(empresa.cnpj), 'Empresa: CNPJ válido (Configurações)');
   falta(empresa.razao_social, 'Empresa: razão social (Configurações)');
-  falta(empresa.inscricao_municipal, 'Empresa: inscrição municipal (Configurações)');
+  const mei = empresa.regime_tributario === 'mei';
+  // O MEI emite pelo Emissor Nacional (gov.br): não informa inscrição municipal nem alíquota (ISS vai no DAS).
+  if (!mei) falta(empresa.inscricao_municipal, 'Empresa: inscrição municipal (Configurações)');
   falta(empresa.codigo_municipio, 'Empresa: código IBGE do município (Configurações)');
   falta(empresa.regime_tributario, 'Empresa: regime tributário (Configurações)');
   if (cliente) {
@@ -27,8 +29,8 @@ function pendencias(empresa, cliente, nota) {
   }
   falta(nota.discriminacao, 'Nota: discriminação do serviço');
   falta(nota.valor_servicos > 0, 'Nota: valor maior que zero');
-  falta(nota.item_lista_servico, 'Nota: item da lista de serviços (LC 116)');
-  falta(nota.aliquota !== null && nota.aliquota !== undefined && nota.aliquota !== '', 'Nota: alíquota do ISS');
+  falta(nota.item_lista_servico, mei ? 'Nota: código do serviço (tributação nacional)' : 'Nota: item da lista de serviços (LC 116)');
+  if (!mei) falta(nota.aliquota !== null && nota.aliquota !== undefined && nota.aliquota !== '', 'Nota: alíquota do ISS');
   return p;
 }
 

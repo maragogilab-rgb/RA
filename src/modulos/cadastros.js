@@ -49,6 +49,14 @@ function lerPessoa(b, tabela) {
       inscricao_municipal: v.texto(b.inscricao_municipal, 'inscricao_municipal', { max: 30 }),
       inscricao_estadual: v.texto(b.inscricao_estadual, 'inscricao_estadual', { max: 30 }),
       email_nf: v.texto(b.email_nf, 'email_nf', { max: 200 }),
+      contato: v.texto(b.contato, 'contato', { max: 100 }),
+      relacao: v.opcao(b.relacao, 'relacao', ['cliente', 'lead', 'parceiro'], { padrao: 'cliente' }),
+      segmento: v.texto(b.segmento, 'segmento', { max: 100 }),
+      estagio: v.texto(b.estagio, 'estagio', { max: 50 }),
+      classificacao: v.texto(b.classificacao, 'classificacao', { max: 50 }),
+      origem: v.texto(b.origem, 'origem', { max: 100 }),
+      prazo_faturamento: v.texto(b.prazo_faturamento, 'prazo_faturamento', { max: 100 }),
+      proximo_contato: v.data(b.proximo_contato, 'proximo_contato'),
       servico_padrao_id: v.inteiro(b.servico_padrao_id, 'servico_padrao_id'),
     });
   } else {
@@ -66,9 +74,15 @@ function registrarPessoas(router, db, tabela, rotulo) {
   };
 
   router.get(`/api/${tabela}`, ({ query }) => {
-    const { where, params } = montarBusca(query, ['nome', 'documento', 'email', 'cidade']);
+    const { where: w0, params } = montarBusca(query, ['nome', 'documento', 'email', 'cidade']);
+    let where = w0;
+    if (tabela === 'clientes') {
+      for (const campo of ['relacao', 'segmento', 'estagio']) {
+        if (query[campo]) { where += `${where ? ' AND' : 'WHERE'} ${campo} = ?`; params.push(String(query[campo])); }
+      }
+    }
     const extra = tabela === 'clientes' ? ', s.nome AS servico_padrao_nome FROM clientes LEFT JOIN servicos s ON s.id = clientes.servico_padrao_id' : ` FROM ${tabela}`;
-    return db.prepare(`SELECT ${tabela}.*${extra} ${where.replace(/\b(nome|ativo|documento|email|cidade)\b/g, `${tabela}.$1`)} ORDER BY ${tabela}.nome LIMIT 1000`).all(...params);
+    return db.prepare(`SELECT ${tabela}.*${extra} ${where.replace(/\b(nome|ativo|documento|email|cidade|relacao|segmento|estagio)\b/g, `${tabela}.$1`)} ORDER BY ${tabela}.nome LIMIT 1000`).all(...params);
   });
 
   router.get(`/api/${tabela}/:id`, ({ params }) => buscar(params.id));

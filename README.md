@@ -32,6 +32,35 @@ npm start      # inicia o sistema
 Acesse **http://localhost:3000** com `admin@empresa.com` / `admin123`.
 **Troque a senha no primeiro acesso** em *Configurações → Minha conta*.
 
+## Orçamento em PDF
+
+Em um orçamento, clique em **Gerar orçamento (PDF)**. Abre o documento em A4 no estilo da Maragogi Lab:
+logo, "Preparado para" com o contato do cliente, tabela com serviço, detalhe, quantidade e medida, caixa de total,
+pagamento, prazo, bloco de condições (ex.: *Retirada / devolução*), termos e dados do PIX no rodapé.
+Na janela de impressão, escolha **Salvar como PDF**.
+
+- Logo, termos padrão, PIX e dados bancários ficam em **Configurações → Orçamento (PDF)**.
+- Cada orçamento pode ter categoria, texto de pagamento e prazo, título do bloco de condições e termos próprios
+  (os termos padrão vêm preenchidos).
+
+## Importar do painel antigo
+
+Em **Configurações → Importar dados do painel antigo**, selecione o backup `.json`. Também dá para usar o terminal:
+`npm run importar -- backup-maragogi-lab.json`. São importados:
+
+- configurações da empresa (CNPJ, endereço, PIX, banco e termos);
+- clientes, leads e parceiros (com segmento e estágio);
+- orçamentos, incluindo itens, medidas e condições;
+- lançamentos financeiros e as notas já emitidas.
+
+Pode importar de novo sem medo: o que já foi importado é ignorado. Agenda e tarefas não são importadas.
+
+## MEI
+
+Com o regime **MEI** em Configurações, o painel mostra o faturamento do ano em relação ao teto do MEI. As notas
+seguem as regras do MEI: a emissão é feita no **Emissor Nacional** ([nfse.gov.br](https://www.nfse.gov.br/EmissorNacional)),
+sem inscrição municipal nem alíquota de ISS, que já é paga no DAS. Use **Copiar dados** e depois **Registrar nota emitida**.
+
 ## Nota fiscal de serviço (NFS-e)
 
 1. **Configurações → Dados da empresa e nota fiscal**: preencha razão social, CNPJ, inscrição municipal,

@@ -3,6 +3,7 @@
 const { erro } = require('../http');
 const auth = require('../auth');
 const v = require('../validar');
+const { importarPainel } = require('../importar');
 
 const exigirAdmin = (ctx) => {
   if (ctx.usuario.papel !== 'admin') throw erro(403, 'Acesso restrito a administradores');
@@ -31,7 +32,8 @@ function registrarFalha(ip) {
 const CAMPOS_EMPRESA = ['nome', 'razao_social', 'cnpj', 'inscricao_municipal', 'regime_tributario', 'telefone', 'email',
   'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'codigo_municipio',
   'aliquota_iss', 'item_lista_servico', 'codigo_tributario_municipio', 'cnae',
-  'nfse_provedor', 'nfse_ambiente', 'nfse_token', 'endereco'];
+  'nfse_provedor', 'nfse_ambiente', 'nfse_token', 'endereco',
+  'termos_orcamento', 'pix_chave', 'pix_titular', 'dados_bancarios', 'logo', 'teto_mei'];
 const CAMPO_SECRETO = 'nfse_token';
 
 function registrar(router, db) {
@@ -151,10 +153,20 @@ function registrar(router, db) {
     for (const c of CAMPOS_EMPRESA) {
       // Token em branco significa "manter o atual".
       if (c === CAMPO_SECRETO && !b[c]) continue;
-      if (c === 'endereco' && b[c] === undefined) continue;
-      up.run(`empresa.${c}`, v.texto(b[c], c, { max: 500 }) || '');
+      if ((c === 'endereco' || c === 'logo') && b[c] === undefined) continue;
+      if (c === 'logo' && b.logo && !/^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(b.logo)) {
+        throw erro(400, 'Logo deve ser uma imagem PNG, JPG, WEBP ou SVG');
+      }
+      const max = c === 'logo' ? 700000 : c === 'termos_orcamento' ? 4000 : 500;
+      up.run(`empresa.${c}`, v.texto(b[c], c, { max }) || '');
     }
     return publicarEmpresa();
+  });
+
+  // ---------- Importação do painel antigo ----------
+  router.post('/api/importar/painel', (ctx) => {
+    exigirAdmin(ctx);
+    return importarPainel(db, ctx.body, ctx.usuario.id);
   });
 
   // ---------- Painel ----------
@@ -164,7 +176,14 @@ function registrar(router, db) {
     const um = (sql, ...p) => Object.values(db.prepare(sql).get(...p))[0] || 0;
     const inicioSerie = v.somarMeses(inicioMes, -5);
     const competencia = hoje.slice(0, 7);
+    const empresa = lerEmpresa(db);
+    const inicioAno = `${hoje.slice(0, 4)}-01-01`;
     return {
+      mei: empresa.regime_tributario === 'mei' ? {
+        teto: Math.round(Number(empresa.teto_mei || 81000) * 100),
+        faturado_ano: um("SELECT SUM(valor_pago) FROM lancamentos WHERE tipo = 'receber' AND status = 'pago' AND pago_em >= ?", inicioAno),
+        a_receber_ano: um("SELECT SUM(valor) FROM lancamentos WHERE tipo = 'receber' AND status = 'aberto' AND vencimento BETWEEN ? AND ?", inicioAno, `${hoje.slice(0, 4)}-12-31`),
+      } : null,
       recebido_mes: um("SELECT SUM(valor_pago) FROM lancamentos WHERE tipo = 'receber' AND status = 'pago' AND pago_em >= ?", inicioMes),
       faturado_mes: um("SELECT SUM(valor) FROM lancamentos WHERE tipo = 'receber' AND status != 'cancelado' AND vencimento BETWEEN ? AND ?", inicioMes, `${competencia}-31`),
       saldo_mes: um(`SELECT SUM(CASE WHEN tipo = 'receber' THEN valor_pago ELSE -valor_pago END)

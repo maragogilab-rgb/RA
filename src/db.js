@@ -164,6 +164,15 @@ CREATE TABLE IF NOT EXISTS notas_fiscais (
   criado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Registro de dados importados de outros sistemas (evita duplicar ao importar de novo).
+CREATE TABLE IF NOT EXISTS ids_externos (
+  origem TEXT NOT NULL,
+  id_externo TEXT NOT NULL,
+  tabela TEXT NOT NULL,
+  id_local INTEGER NOT NULL,
+  PRIMARY KEY (origem, tabela, id_externo)
+);
+
 CREATE INDEX IF NOT EXISTS idx_projetos_status ON projetos(status);
 CREATE INDEX IF NOT EXISTS idx_lanc_venc ON lancamentos(vencimento);
 CREATE INDEX IF NOT EXISTS idx_lanc_status ON lancamentos(tipo, status);
@@ -197,6 +206,15 @@ const COLUNAS_EXTRAS = {
     codigo_municipio: 'TEXT',
     servico_padrao_id: 'INTEGER REFERENCES servicos(id)',
     email_nf: 'TEXT',
+    contato: 'TEXT',
+    // Relacionamento (funil comercial).
+    relacao: "TEXT NOT NULL DEFAULT 'cliente'",
+    segmento: 'TEXT',
+    estagio: 'TEXT',
+    classificacao: 'TEXT',
+    origem: 'TEXT',
+    prazo_faturamento: 'TEXT',
+    proximo_contato: 'TEXT',
   },
   fornecedores: {
     tipo_pessoa: "TEXT NOT NULL DEFAULT 'PJ'",
@@ -207,6 +225,18 @@ const COLUNAS_EXTRAS = {
     complemento: 'TEXT',
     bairro: 'TEXT',
     codigo_municipio: 'TEXT',
+  },
+  // Campos usados no documento de orçamento.
+  projetos: {
+    pagamento_texto: 'TEXT',
+    termos: 'TEXT',
+    categoria: 'TEXT',
+    prazo_texto: 'TEXT',
+    condicoes_titulo: 'TEXT',
+  },
+  projeto_itens: {
+    detalhe: 'TEXT',
+    medida: 'TEXT',
   },
   // Enquadramento fiscal do serviço.
   servicos: {

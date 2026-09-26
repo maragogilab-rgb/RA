@@ -50,7 +50,7 @@ export async function lista(raiz) {
     );
   }
 
-  trocar(raiz, cabecalho('Projetos e propostas', btn('Nova proposta', () => { location.hash = '#/projetos/novo'; }, 'btn-primario')), f.el, area);
+  trocar(raiz, cabecalho('Orçamentos e projetos', btn('Novo orçamento', () => { location.hash = '#/projetos/novo'; }, 'btn-primario')), f.el, area);
   await carregar();
 }
 
@@ -76,6 +76,11 @@ export async function editor(raiz, { id } = {}) {
   const inDesconto = el('input', { id: 'p-desconto', inputmode: 'decimal', placeholder: '0,00' }, proj?.desconto ? deCentavos(proj.desconto) : '');
   const inCond = el('textarea', { id: 'p-cond', rows: 2, placeholder: 'Ex.: 50% na aprovação e 50% na entrega. Inclui 2 rodadas de ajustes.' }, proj?.condicoes);
   const inObs = el('textarea', { id: 'p-obs', rows: 2, placeholder: 'Anotações internas (não aparecem na proposta)' }, proj?.observacoes);
+  const inCategoria = el('input', { id: 'p-categoria', list: 'categorias-orc', placeholder: 'Ex.: Locação de itens / Festas' }, proj?.categoria);
+  const inPagTexto = el('input', { id: 'p-pagtexto', placeholder: 'Ex.: Pix à vista ou 50% de entrada + 50% na entrega' }, proj?.pagamento_texto);
+  const inPrazoTexto = el('input', { id: 'p-prazotexto', placeholder: 'Ex.: 5 dias úteis após aprovação da arte' }, proj?.prazo_texto);
+  const inCondTitulo = el('input', { id: 'p-condtitulo', placeholder: 'Condições', list: 'titulos-cond' }, proj?.condicoes_titulo);
+  const inTermos = el('textarea', { id: 'p-termos', rows: 5 }, proj ? proj.termos : (estado.empresa?.termos_orcamento || ''));
 
   const corpoItens = h('tbody');
   const totais = h('div', { class: 'totais' });
@@ -83,21 +88,27 @@ export async function editor(raiz, { id } = {}) {
   function linhaItem(item = {}) {
     const sel = h('select', { 'aria-label': 'Serviço' }, h('option', { value: '' }, 'Serviço avulso (descreva abaixo)'),
       servicos.map((s) => h('option', { value: s.id, selected: item.servico_id === s.id }, `${s.nome} — ${R$(s.preco)}/${ROTULOS[s.unidade]}`)));
-    const desc = el('input', { 'aria-label': 'Descrição', placeholder: 'Descrição do item' }, item.descricao);
+    const desc = el('input', { 'aria-label': 'Nome do item', placeholder: 'Nome do item' }, item.descricao);
+    const detalhe = el('input', { 'aria-label': 'Detalhe', placeholder: 'Detalhe (opcional) — ex.: Animadores e pintura facial', class: 'sub' }, item.detalhe);
+    const medida = el('input', { 'aria-label': 'Medida', placeholder: 'ex.: 2 horas' }, item.medida);
     const qtd = el('input', { inputmode: 'decimal', 'aria-label': 'Quantidade' }, item.quantidade ? String(item.quantidade).replace('.', ',') : '1');
     const preco = el('input', { inputmode: 'decimal', 'aria-label': 'Valor unitário', placeholder: '0,00' }, item.preco_unitario !== undefined ? deCentavos(item.preco_unitario) : '');
     const sub = h('td', { class: 'num', 'data-rotulo': 'Subtotal' });
     const tr = h('tr', {},
-      h('td', { 'data-rotulo': 'Serviço' }, sel, desc),
+      h('td', { 'data-rotulo': 'Serviço' }, sel, desc, detalhe),
       h('td', { 'data-rotulo': 'Qtd.' }, qtd),
+      h('td', { 'data-rotulo': 'Medida' }, medida),
       h('td', { 'data-rotulo': 'Valor unit.' }, preco),
       sub,
       h('td', {}, h('button', { class: 'btn-icone', type: 'button', 'aria-label': 'Remover item', onclick: () => { tr.remove(); recalcular(); } }, '×')));
-    tr.ler = () => ({ servico_id: Number(sel.value) || null, descricao: desc.value, quantidade: paraNumero(qtd.value), preco_unitario: paraCentavos(preco.value) });
+    tr.ler = () => ({
+      servico_id: Number(sel.value) || null, descricao: desc.value, detalhe: detalhe.value, medida: medida.value,
+      quantidade: paraNumero(qtd.value), preco_unitario: paraCentavos(preco.value),
+    });
     tr.sub = sub;
     sel.addEventListener('change', () => {
       const s = porId.get(Number(sel.value));
-      if (s) { preco.value = deCentavos(s.preco); desc.value = s.nome; }
+      if (s) { preco.value = deCentavos(s.preco); desc.value = s.nome; if (!medida.value && s.unidade !== 'projeto' && s.unidade !== 'unidade') medida.value = ROTULOS[s.unidade]; }
       recalcular();
     });
     qtd.addEventListener('input', recalcular);
@@ -141,9 +152,11 @@ export async function editor(raiz, { id } = {}) {
         validade: inValidade.value, prazo_entrega: inPrazo.value, forma_pagamento: selForma.value,
         parcelas: Number(inParcelas.value) || 1, primeiro_vencimento: inPrimeiro.value,
         desconto: paraCentavos(inDesconto.value), condicoes: inCond.value, observacoes: inObs.value, itens,
+        categoria: inCategoria.value, pagamento_texto: inPagTexto.value, prazo_texto: inPrazoTexto.value,
+        condicoes_titulo: inCondTitulo.value, termos: inTermos.value,
       };
       const r = proj ? await PUT(`/projetos/${proj.id}`, corpo) : await POST('/projetos', corpo);
-      aviso(`Proposta #${r.id} salva`);
+      aviso(`Orçamento #${r.id} salvo`);
       location.hash = `#/projetos/${r.id}`;
     } catch (e) {
       aviso(e.message, 'erro');
@@ -152,10 +165,11 @@ export async function editor(raiz, { id } = {}) {
 
   const campo = (rotulo, e, classe = '') => h('div', { class: `campo ${classe}` }, h('label', { for: e.id }, rotulo), e);
   trocar(raiz,
-    cabecalho(proj ? `Editar proposta #${proj.id}` : 'Nova proposta', btn('Voltar', () => history.back(), 'btn-fantasma')),
+    cabecalho(proj ? `Editar orçamento #${proj.id}` : 'Novo orçamento', btn('Voltar', () => history.back(), 'btn-fantasma')),
     h('section', { class: 'cartao' }, h('h2', { class: 'secao' }, 'Projeto'), h('div', { class: 'form-grade' },
       campo('Cliente', selCliente, 'campo-cheio'),
-      campo('Título do projeto', inTitulo, 'campo-cheio'),
+      campo('Título do projeto', inTitulo),
+      campo('Categoria (aparece no topo do orçamento)', inCategoria),
       campo('Descrição / escopo (aparece na proposta)', inDesc, 'campo-cheio'),
       campo('Data da proposta', inData),
       campo('Proposta válida até', inValidade),
@@ -163,7 +177,7 @@ export async function editor(raiz, { id } = {}) {
     h('section', { class: 'cartao' },
       h('h2', { class: 'secao' }, 'Serviços'),
       h('div', { class: 'tabela-wrap' }, h('table', { class: 'tabela-itens' },
-        h('thead', {}, h('tr', {}, h('th', {}, 'Serviço'), h('th', {}, 'Qtd.'), h('th', {}, 'Valor unit.'), h('th', { class: 'num' }, 'Subtotal'), h('th', {}))),
+        h('thead', {}, h('tr', {}, h('th', {}, 'Serviço'), h('th', {}, 'Qtd.'), h('th', {}, 'Medida'), h('th', {}, 'Valor unit.'), h('th', { class: 'num' }, 'Subtotal'), h('th', {}))),
         corpoItens)),
       btn('+ Adicionar serviço', () => linhaItem().focus(), 'btn-fantasma'),
       totais),
@@ -172,10 +186,16 @@ export async function editor(raiz, { id } = {}) {
       campo('Parcelas', inParcelas),
       campo('1º vencimento (padrão: data da aprovação)', inPrimeiro),
       campo('Desconto (R$)', inDesconto),
-      campo('Condições (aparecem na proposta)', inCond, 'campo-cheio'),
-      campo('Observações internas', inObs, 'campo-cheio'))),
+      campo('Pagamento — texto do orçamento (opcional, substitui a forma acima)', inPagTexto, 'campo-cheio'),
+      campo('Prazo — texto do orçamento', inPrazoTexto, 'campo-cheio'),
+      campo('Título do bloco de condições', inCondTitulo),
+      campo('Texto das condições', inCond, 'campo-cheio'),
+      campo('Termos / observações do orçamento (uma por linha)', inTermos, 'campo-cheio'),
+      campo('Observações internas', inObs, 'campo-cheio')),
+      h('datalist', { id: 'categorias-orc' }, ['Locação de itens / Festas', 'Gráfica', 'Cobertura de evento', 'Casamento', 'Audiovisual', 'Social media', 'Corporativo'].map((c) => h('option', { value: c }))),
+      h('datalist', { id: 'titulos-cond' }, ['Condições', 'Retirada / devolução', 'Entrega', 'O que está incluso'].map((c) => h('option', { value: c })))),
     h('div', { class: 'barra-final' },
-      btn('Salvar proposta', salvar, 'btn-primario')),
+      btn('Salvar orçamento', salvar, 'btn-primario')),
   );
 }
 
@@ -229,14 +249,15 @@ export async function detalhe(raiz, { id }) {
     });
   };
 
-  const acoes = [btn('Voltar', () => { location.hash = '#/projetos'; }, 'btn-fantasma'), btn('Imprimir proposta', () => window.print())];
+  const gerarPdf = () => window.open(`/orcamento.html?id=${p.id}&imprimir=1`, '_blank', 'noopener');
+  const acoes = [btn('Voltar', () => { location.hash = '#/projetos'; }, 'btn-fantasma'), btn('Gerar orçamento (PDF)', gerarPdf, p.status === 'proposta' ? 'btn-primario' : '')];
   if (p.status === 'proposta') {
     acoes.push(btn('Editar', () => { location.hash = `#/projetos/${id}/editar`; }));
     acoes.push(btn('Recusada', executar(async () => {
       if (!await confirmar('Marcar a proposta como recusada pelo cliente?', 'Marcar recusada', 'btn-perigo')) return;
       await POST(`/projetos/${id}/recusar`);
     }), 'btn-fantasma'));
-    acoes.push(btn('Aprovar proposta', aprovar, 'btn-primario'));
+    acoes.push(btn('Aprovar proposta', aprovar));
   } else if (ETAPAS.includes(p.status)) {
     acoes.push(btn('+ Custo', adicionarCusto));
     acoes.push(btn('Emitir NF', () => novaNotaDe({ projeto_id: p.id }), 'btn-primario'));
@@ -283,7 +304,7 @@ export async function detalhe(raiz, { id }) {
       h('strong', {}, empresa.nome || 'Maragogi Lab'),
       h('div', {}, [empresa.cnpj && `CNPJ ${empresa.cnpj}`, empresa.telefone, empresa.email].filter(Boolean).join(' · ')),
       empresa.endereco ? h('div', {}, empresa.endereco) : null),
-    cabecalho(`${p.status === 'proposta' ? 'Proposta' : 'Projeto'} #${p.id} · ${p.titulo}`, ...acoes),
+    cabecalho(`${p.status === 'proposta' ? 'Orçamento' : 'Projeto'} #${p.id} · ${p.titulo}`, ...acoes),
     etapas,
     h('section', { class: 'cartao' }, h('div', { class: 'grade-info' },
       info('Cliente', p.cliente_nome),
@@ -299,8 +320,9 @@ export async function detalhe(raiz, { id }) {
     h('section', { class: 'cartao' },
       h('h2', { class: 'secao' }, 'Serviços'),
       tabela([
-        { titulo: 'Serviço', valor: (l) => l.descricao },
+        { titulo: 'Serviço', valor: (l) => h('div', {}, l.descricao, l.detalhe ? h('small', { class: 'mudo bloco' }, l.detalhe) : null) },
         { titulo: 'Qtd.', classe: 'num', valor: (l) => num(l.quantidade) },
+        { titulo: 'Medida', valor: (l) => l.medida || '—' },
         { titulo: 'Valor unit.', classe: 'num', valor: (l) => R$(l.preco_unitario) },
         { titulo: 'Subtotal', classe: 'num', valor: (l) => R$(l.subtotal) },
       ], p.itens),
@@ -308,7 +330,11 @@ export async function detalhe(raiz, { id }) {
         h('div', {}, h('span', {}, 'Subtotal'), h('span', {}, R$(p.subtotal))),
         p.desconto ? h('div', {}, h('span', {}, 'Desconto'), h('span', {}, `− ${R$(p.desconto)}`)) : null,
         h('div', { class: 'total' }, h('span', {}, 'Total'), h('span', {}, R$(p.total)))),
-      p.condicoes ? h('div', { class: 'escopo' }, h('h3', {}, 'Condições'), h('p', {}, p.condicoes)) : null),
+      p.pagamento_texto || p.prazo_texto ? h('div', { class: 'grade-info escopo' },
+        p.pagamento_texto ? h('div', { class: 'info' }, h('span', {}, 'Pagamento (orçamento)'), h('strong', {}, p.pagamento_texto)) : null,
+        p.prazo_texto ? h('div', { class: 'info' }, h('span', {}, 'Prazo'), h('strong', {}, p.prazo_texto)) : null) : null,
+      p.condicoes ? h('div', { class: 'escopo' }, h('h3', {}, p.condicoes_titulo || 'Condições'), h('p', {}, p.condicoes)) : null,
+      p.termos ? h('div', { class: 'escopo' }, h('h3', {}, 'Termos'), h('p', { class: 'mudo' }, p.termos)) : null),
     p.status !== 'proposta' && p.status !== 'recusado' ? h('div', { class: 'nao-imprimir' },
       h('div', { class: 'kpis' },
         kpiMini('Receita', R$(r.receita)),

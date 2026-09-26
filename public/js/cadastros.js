@@ -7,6 +7,9 @@ const UNIDADES = ['projeto', 'hora', 'diaria', 'mes', 'unidade', 'video', 'post'
 
 const UFS = ['', 'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
 
+const ESTAGIOS = ['', 'Novo lead', 'Contato feito', 'Proposta enviada', 'Negociação', 'Fechado', 'Perdido'];
+const SEGMENTOS = ['', 'Casamentos e sociais', 'Eventos corporativos', 'Marcas locais', 'Shows e eventos musicais', 'Serviços gráficos', 'Locação de itens / festas', 'Outros'];
+
 const ENDERECO = [
   { tipo: 'titulo', rotulo: 'Endereço', ajuda: '— digite o CEP para preencher automaticamente' },
   { nome: 'cep', rotulo: 'CEP', max: 9, nf: true, inputmode: 'numeric' },
@@ -31,7 +34,16 @@ async function camposCliente() {
     { nome: 'inscricao_estadual', rotulo: 'Inscrição estadual', max: 30 },
     { nome: 'servico_padrao_id', rotulo: 'Tipo de serviço contratado', tipo: 'select',
       opcoes: [['', '—'], ...servicos.map((sv) => [sv.id, sv.nome])], ajuda: 'Usado para sugerir o código do serviço na NF' },
+    { tipo: 'titulo', rotulo: 'Relacionamento' },
+    { nome: 'relacao', rotulo: 'Tipo de relação', tipo: 'select', opcoes: [['cliente', 'Cliente'], ['lead', 'Lead (prospecção)'], ['parceiro', 'Parceiro (indica clientes)']] },
+    { nome: 'estagio', rotulo: 'Estágio', tipo: 'select', opcoes: ESTAGIOS.map((e) => [e, e || '—']) },
+    { nome: 'segmento', rotulo: 'Segmento', tipo: 'select', opcoes: SEGMENTOS.map((e) => [e, e || '—']) },
+    { nome: 'classificacao', rotulo: 'Classificação', tipo: 'select', opcoes: [['', '—'], ['A — Prioritário', 'A — Prioritário'], ['B — Regular', 'B — Regular'], ['C — Ocasional', 'C — Ocasional']] },
+    { nome: 'origem', rotulo: 'Origem', placeholder: 'Indicação, Instagram…' },
+    { nome: 'proximo_contato', rotulo: 'Próximo contato (follow-up)', tipo: 'date' },
+    { nome: 'prazo_faturamento', rotulo: 'Prazo de faturamento', placeholder: 'Ex.: 21 dias após entrega' },
     { tipo: 'titulo', rotulo: 'Contato' },
+    { nome: 'contato', rotulo: 'Pessoa de contato', max: 100, placeholder: 'Ex.: Alessandra, @perfil (Instagram)' },
     { nome: 'email', rotulo: 'E-mail', tipo: 'email', max: 200 },
     { nome: 'telefone', rotulo: 'Telefone / WhatsApp', tipo: 'tel', max: 30 },
     { nome: 'email_nf', rotulo: 'E-mail para envio da NF', tipo: 'email', largura: 'cheio', max: 200, ajuda: 'Se vazio, usa o e-mail principal' },
@@ -74,11 +86,12 @@ function ligarCep(form) {
 }
 
 // Página genérica de cadastro (lista + formulário em modal).
-function paginaCadastro({ titulo, recurso, singular, campos, colunas, buscaPlaceholder, largo = false }) {
+function paginaCadastro({ titulo, recurso, singular, campos, colunas, buscaPlaceholder, largo = false, extraFiltros = [] }) {
   return async (raiz) => {
     const lista = h('div');
     const f = filtros([
       { nome: 'busca', rotulo: buscaPlaceholder },
+      ...extraFiltros,
       { nome: 'ativo', tipo: 'select', rotulo: 'Situação', padrao: '1', opcoes: [['1', 'Ativos'], ['0', 'Inativos'], ['', 'Todos']] },
     ], carregar);
 
@@ -123,14 +136,19 @@ function paginaCadastro({ titulo, recurso, singular, campos, colunas, buscaPlace
 const prontoNF = (l) => Boolean(l.documento && l.cep && l.logradouro && l.bairro && l.uf && l.codigo_municipio);
 
 export const clientes = paginaCadastro({
-  titulo: 'Clientes', recurso: 'clientes', singular: 'Cliente', campos: camposCliente, largo: true, buscaPlaceholder: 'Buscar por nome, documento, e-mail…',
+  titulo: 'Clientes e leads', recurso: 'clientes', singular: 'Cliente', campos: camposCliente, largo: true, buscaPlaceholder: 'Buscar por nome, documento, e-mail…',
+  extraFiltros: [
+    { nome: 'relacao', tipo: 'select', rotulo: 'Relação', opcoes: [['', 'Clientes, leads e parceiros'], ['cliente', 'Clientes'], ['lead', 'Leads'], ['parceiro', 'Parceiros']] },
+    { nome: 'segmento', tipo: 'select', rotulo: 'Segmento', opcoes: SEGMENTOS.map((e) => [e, e || 'Todos os segmentos']) },
+    { nome: 'estagio', tipo: 'select', rotulo: 'Estágio', opcoes: ESTAGIOS.map((e) => [e, e || 'Todos os estágios']) },
+  ],
   colunas: [
     { titulo: 'Nome', valor: (l) => h('div', {}, l.nome, l.nome_fantasia ? h('small', { class: 'mudo bloco' }, l.nome_fantasia) : null), csv: (l) => l.nome },
-    { titulo: 'CPF/CNPJ', valor: (l) => l.documento || '' },
-    { titulo: 'Serviço', valor: (l) => l.servico_padrao_nome || '' },
+    { titulo: 'Contato', valor: (l) => [l.contato, l.telefone].filter(Boolean).join(' · ') },
+    { titulo: 'Segmento', valor: (l) => l.segmento || '' },
+    { titulo: 'Relação', valor: (l) => h('div', {}, { cliente: 'Cliente', lead: 'Lead', parceiro: 'Parceiro' }[l.relacao] || '',
+      l.estagio ? h('small', { class: 'mudo bloco' }, l.estagio) : null), csv: (l) => `${l.relacao}${l.estagio ? ` / ${l.estagio}` : ''}` },
     { titulo: 'Dados p/ NF', valor: (l) => (prontoNF(l) ? selo('Completo', 'ok') : selo('Incompleto', 'aviso')), csv: (l) => (prontoNF(l) ? 'Completo' : 'Incompleto') },
-    { titulo: 'Telefone', valor: (l) => l.telefone || '' },
-    { titulo: 'E-mail', valor: (l) => l.email || '' },
     { titulo: 'Cidade/UF', valor: (l) => [l.cidade, l.uf].filter(Boolean).join(' / ') },
   ],
 });

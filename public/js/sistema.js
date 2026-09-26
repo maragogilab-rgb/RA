@@ -121,11 +121,12 @@ export async function painel(raiz) {
   const etapa = (st) => d.projetos_por_etapa.find((e) => e.status === st)?.qtd || 0;
   trocar(raiz,
     cabecalho(`Olá, ${estado.usuario.nome.split(' ')[0]}`,
-      btn('Nova proposta', () => { location.hash = '#/projetos/novo'; }, 'btn-primario'),
+      btn('Novo orçamento', () => { location.hash = '#/projetos/novo'; }, 'btn-primario'),
       btn('Emitir NF', () => { location.hash = '#/notas'; })),
     d.contratos_sem_cobranca ? h('div', { class: 'faixa faixa-info', role: 'status' },
       `${d.contratos_sem_cobranca} contrato(s) de fee mensal ainda sem cobrança gerada neste mês. `,
       h('a', { href: '#/contratos' }, 'Gerar cobranças →')) : null,
+    d.mei ? medidorMei(d.mei) : null,
     h('div', { class: 'kpis' },
       kpi('Recebido no mês', R$(d.recebido_mes), null, `Saldo do mês: ${R$(d.saldo_mes)}`),
       kpi('Receita recorrente (fee)', R$(d.receita_recorrente), null, `${d.qtd_contratos} contrato(s) ativo(s)`),
@@ -165,6 +166,22 @@ export async function painel(raiz) {
   );
 }
 
+// Faturamento do ano em relação ao teto do MEI.
+function medidorMei({ teto, faturado_ano: fat, a_receber_ano: prev }) {
+  const pct = teto ? Math.round((fat / teto) * 100) : 0;
+  const pctPrev = teto ? Math.min(100, Math.round(((fat + prev) / teto) * 100)) : 0;
+  const tom = pct >= 90 ? 'critico' : pct >= 70 ? 'aviso' : 'ok';
+  return h('section', { class: 'cartao medidor-mei' },
+    h('div', { class: 'secao-topo' },
+      h('h2', { class: 'secao' }, `Teto do MEI ${hoje().slice(0, 4)}`),
+      h('span', {}, h('strong', {}, R$(fat)), h('span', { class: 'mudo' }, ` de ${R$(teto)} · ${pct}%`))),
+    h('div', { class: 'barra-progresso', role: 'progressbar', 'aria-valuenow': pct, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': 'Faturamento do ano em relação ao teto do MEI' },
+      h('div', { class: 'previsto', style: `width:${pctPrev}%` }),
+      h('div', { class: `feito tom-${tom}`, style: `width:${Math.min(100, pct)}%` })),
+    h('small', { class: 'mudo' }, `Recebido no ano (regime de caixa). Com o que falta receber este ano: ${R$(fat + prev)}. Restam ${R$(Math.max(0, teto - fat))} até o teto.`,
+      pct >= 70 ? ' ⚠ Converse com seu contador sobre o desenquadramento do MEI.' : ''));
+}
+
 // ---------- Configurações ----------
 export async function configuracoes(raiz) {
   const admin = estado.usuario.papel === 'admin';
@@ -194,6 +211,12 @@ export async function configuracoes(raiz) {
     { nome: 'aliquota_iss', rotulo: 'Alíquota ISS padrão (%)', tipo: 'number', placeholder: 'Ex.: 2' },
     { nome: 'codigo_tributario_municipio', rotulo: 'Código de tributação municipal' },
     { nome: 'cnae', rotulo: 'CNAE principal', placeholder: 'Ex.: 7311-4/00' },
+    { tipo: 'titulo', rotulo: 'Orçamento (PDF)' },
+    { nome: 'termos_orcamento', rotulo: 'Termos padrão do orçamento (um por linha)', tipo: 'textarea', largura: 'cheio' },
+    { nome: 'pix_chave', rotulo: 'Chave PIX' },
+    { nome: 'pix_titular', rotulo: 'Titular' },
+    { nome: 'dados_bancarios', rotulo: 'Dados bancários', largura: 'cheio', placeholder: 'Ex.: Banco do Brasil Ag. 0000-0 Conta 00000-0' },
+    { nome: 'teto_mei', rotulo: 'Teto anual do MEI (R$)', tipo: 'number', ajuda: 'Usado no painel quando o regime é MEI' },
     { tipo: 'titulo', rotulo: 'Emissão automática (opcional)' },
     { nome: 'nfse_provedor', rotulo: 'Forma de emissão', tipo: 'select',
       opcoes: [['manual', 'Manual — emito no portal da prefeitura'], ['focusnfe', 'Automática — Focus NFe']] },
@@ -209,13 +232,29 @@ export async function configuracoes(raiz) {
       for (const k of ['logradouro', 'bairro', 'cidade', 'uf', 'codigo_municipio']) if (d[k]) formEmpresa.els[k].value = d[k];
     } catch (e) { aviso(e.message, 'erro'); }
   });
+  // Logo: guardada como imagem embutida (data URL), exibida no orçamento.
+  let logo = estado.empresa?.logo || '';
+  const previa = h('img', { class: 'previa-logo', alt: 'Logo atual', src: logo || null, hidden: !logo });
+  const inLogo = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/svg+xml', id: 'logo-arquivo' });
+  inLogo.addEventListener('change', () => {
+    const f = inLogo.files[0];
+    if (!f) return;
+    if (f.size > 500000) { aviso('Use uma imagem de até 500 KB', 'erro'); inLogo.value = ''; return; }
+    const r = new FileReader();
+    r.onload = () => { logo = r.result; previa.src = logo; previa.hidden = false; };
+    r.readAsDataURL(f);
+  });
+  const campoLogo = h('div', { class: 'campo campo-cheio' }, h('label', { for: 'logo-arquivo' }, 'Logo (aparece no orçamento)'),
+    h('div', { class: 'linha-logo' }, previa, inLogo,
+      btn('Remover', () => { logo = ''; previa.hidden = true; inLogo.value = ''; }, 'btn-pequeno btn-fantasma')));
+  formEmpresa.el.prepend(campoLogo);
   if (!admin) Object.values(formEmpresa.els).forEach((el) => { el.disabled = true; });
   secoes.push(h('section', { class: 'cartao' }, h('h2', { class: 'secao' }, 'Dados da empresa e nota fiscal'),
     h('p', { class: 'mudo' }, 'Os campos marcados com NF são exigidos pela prefeitura para emitir a NFS-e. Confirme os códigos fiscais com seu contador.'),
     formEmpresa.el,
     admin ? btn('Salvar dados da empresa', async () => {
       try {
-        estado.empresa = await PUT('/empresa', formEmpresa.ler());
+        estado.empresa = await PUT('/empresa', { ...formEmpresa.ler(), logo });
         formEmpresa.els.nfse_token.value = '';
         document.querySelectorAll('.marca-nome').forEach((el) => { el.textContent = estado.empresa.nome || 'ERP'; });
         aviso('Dados salvos');
@@ -275,5 +314,31 @@ export async function configuracoes(raiz) {
     await carregarUsuarios();
   }
 
+  if (admin) secoes.push(secaoImportar());
   trocar(raiz, cabecalho('Configurações'), ...secoes);
+}
+
+// Importa o backup JSON do painel antigo.
+function secaoImportar() {
+  const arq = h('input', { type: 'file', accept: 'application/json,.json', id: 'backup-arquivo' });
+  const resultado = h('div');
+  return h('section', { class: 'cartao' },
+    h('h2', { class: 'secao' }, 'Importar dados do painel antigo'),
+    h('p', { class: 'mudo' }, 'Selecione o arquivo de backup (.json) exportado do painel Maragogi Lab. Clientes, orçamentos, financeiro e configurações são importados; o que já foi importado antes é ignorado.'),
+    h('div', { class: 'linha-logo' }, arq, btn('Importar', async () => {
+      const f = arq.files[0];
+      if (!f) { aviso('Escolha o arquivo de backup', 'erro'); return; }
+      try {
+        const r = await POST('/importar/painel', JSON.parse(await f.text()));
+        estado.empresa = await GET('/empresa');
+        trocar(resultado, h('div', { class: 'faixa faixa-ok' },
+          `Importado: ${r.clientes} cliente(s), ${r.orcamentos} orçamento(s), ${r.lancamentos} lançamento(s), ${r.notas} nota(s).`,
+          r.ignorados ? ` ${r.ignorados} já existiam.` : '',
+          r.nao_importados.agenda || r.nao_importados.tarefas ? ` Agenda (${r.nao_importados.agenda}) e tarefas (${r.nao_importados.tarefas}) não foram importadas.` : ''));
+        aviso('Importação concluída');
+      } catch (e) {
+        aviso(e instanceof SyntaxError ? 'Arquivo JSON inválido' : e.message, 'erro');
+      }
+    }, 'btn-primario')),
+    resultado);
 }
