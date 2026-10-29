@@ -245,6 +245,96 @@ test('nota fiscal: pendências, emissão manual e automática (Focus NFe)', asyn
   assert.match(errada.dados.mensagem, /Alíquota inválida/);
 });
 
+test('emissão automática: cria, envia e acompanha a nota sozinha', async () => {
+  const notaDo = async (lancamentoId) => (await api('GET', '/api/notas')).dados.find((n) => n.lancamento_id === lancamentoId);
+  const executar = async () => (await api('POST', '/api/notas/automacao/executar')).dados;
+  const endereco = { cep: '57955-000', logradouro: 'Rua da Praia', numero: '10', bairro: 'Centro', cidade: 'Maragogi', uf: 'AL', codigo_municipio: '2704500' };
+
+  assert.equal((await api('PUT', '/api/empresa', { nfse_auto: 'quando-quiser' })).status, 400);
+  assert.equal((await api('PUT', '/api/empresa', { nfse_auto_dias: 40 })).status, 400);
+  const emp = await api('PUT', '/api/empresa', { nfse_auto: 'recebimento', fee_auto: '1', nfse_padrao: 'municipal', item_lista_servico: '17.06', aliquota_iss: '2' });
+  assert.equal(emp.dados.nfse_auto_desde, hoje());
+
+  // Mensalidade gerada sozinha; só vira nota quando o pagamento entra.
+  const cli = (await api('POST', '/api/clientes', { nome: 'Hotel Coral Ltda', tipo_pessoa: 'PJ', documento: '11.444.777/0001-61', email_nf: 'fiscal@coral.com', ...endereco })).dados;
+  await api('POST', '/api/contratos', { cliente_id: cli.id, descricao: 'Gestão de Instagram', valor: 200000, dia_vencimento: 5, inicio: `${hoje().slice(0, 7)}-01` });
+  const r1 = await executar();
+  assert.ok(r1.resultado.cobrancas >= 1);
+  const fee = (await api('GET', '/api/lancamentos?tipo=receber&busca=Hotel Coral')).dados[0];
+  assert.equal(fee.origem, 'contrato');
+  assert.equal(await notaDo(fee.id), undefined);
+
+  respostaFocus = { status: 'autorizado', numero: '501', codigo_verificacao: 'AUTO1', url_danfse: 'https://exemplo/501.pdf' };
+  await api('POST', `/api/lancamentos/${fee.id}/pagar`, {});
+  const r2 = await executar();
+  assert.ok(r2.resultado.criadas >= 1);
+  const nf = (await api('GET', `/api/notas/${(await notaDo(fee.id)).id}`)).dados;
+  assert.equal(nf.automatica, 1);
+  assert.deepEqual(nf.pendencias, []);
+  assert.equal(nf.status, 'emitida');
+  assert.equal(nf.numero, '501');
+  assert.equal(nf.valor_servicos, 200000);
+  assert.match(nf.discriminacao, /mês de referência/);
+  const envio = chamadasFocus.find((c) => c.metodo === 'POST' && c.corpo?.servico?.discriminacao === nf.discriminacao);
+  assert.match(envio.url, /\/v2\/nfse\?ref=/);
+  assert.equal(envio.corpo.tomador.email, 'fiscal@coral.com');
+
+  // Rodar de novo não duplica.
+  await executar();
+  assert.equal((await api('GET', '/api/notas')).dados.filter((n) => n.lancamento_id === fee.id).length, 1);
+
+  // Recebimento anterior à ativação não gera nota.
+  const antigo = (await api('POST', '/api/lancamentos', { tipo: 'receber', descricao: 'Job antigo', valor: 5000, vencimento: '2025-01-10', cliente_id: cli.id, pago: true, pago_em: '2025-01-10' })).dados;
+  await executar();
+  assert.equal(await notaDo(antigo.id), undefined);
+
+  // Cliente com cadastro incompleto: a nota espera e sai sozinha depois que o cadastro é completado.
+  const incompleto = (await api('POST', '/api/clientes', { nome: 'Noiva Ana', tipo_pessoa: 'PF', documento: '529.982.247-25' })).dados;
+  const job = (await api('POST', '/api/lancamentos', { tipo: 'receber', descricao: 'Filmagem de casamento', valor: 350000, vencimento: hoje(), cliente_id: incompleto.id, pago: true })).dados;
+  const r3 = await executar();
+  assert.ok(r3.resultado.aguardando_dados >= 1);
+  assert.equal((await notaDo(job.id)).status, 'rascunho');
+  assert.ok(r3.situacao.aguardando_dados >= 1);
+  await api('PUT', `/api/clientes/${incompleto.id}`, { ...incompleto, ...endereco });
+  await executar();
+  assert.equal((await notaDo(job.id)).status, 'emitida');
+
+  // MEI na NFS-e Nacional: vai para /v2/nfsen e é acompanhada até a autorização.
+  await api('PUT', '/api/empresa', { regime_tributario: 'mei', nfse_padrao: 'nacional' });
+  respostaFocus = { status: 'processando_autorizacao' };
+  const mei = (await api('POST', '/api/lancamentos', { tipo: 'receber', descricao: 'Cobertura de evento', valor: 80000, vencimento: hoje(), cliente_id: cli.id, pago: true })).dados;
+  await executar();
+  const nfMei = await notaDo(mei.id);
+  assert.equal(nfMei.status, 'processando');
+  assert.equal(nfMei.api, 'nfsen');
+  const envioMei = chamadasFocus.findLast((c) => c.metodo === 'POST');
+  assert.match(envioMei.url, /\/v2\/nfsen\?ref=/);
+  assert.equal(envioMei.corpo.codigo_opcao_simples_nacional, 2);
+  assert.equal(envioMei.corpo.cnpj_tomador, '11444777000161');
+  assert.equal(envioMei.corpo.valor_servico, 800);
+  assert.equal(envioMei.corpo.cnpj_prestador, '11222333000181');
+  assert.match(envioMei.corpo.codigo_tributacao_nacional_iss, /^\d{6}$/);
+  assert.equal(envioMei.corpo.percentual_aliquota_relativa_municipio, undefined);
+
+  respostaFocus = { status: 'autorizado', numero: '77', codigo_verificacao: 'NAC' };
+  const r4 = await executar();
+  assert.ok(r4.resultado.emitidas >= 1);
+  assert.match(chamadasFocus.findLast((c) => c.metodo === 'GET').url, /\/v2\/nfsen\/nf-/);
+  assert.equal((await notaDo(mei.id)).numero, '77');
+
+  // Desligar para não afetar os outros testes.
+  await api('PUT', '/api/empresa', { nfse_auto: 'desligado', fee_auto: '0', regime_tributario: 'simples', nfse_padrao: 'municipal' });
+  assert.equal((await api('GET', '/api/notas/automacao')).dados.gatilho, 'desligado');
+});
+
+test('código de tributação nacional a partir do item da LC 116', () => {
+  const { codigoTributacaoNacional } = require('../src/nfse/focusnfe');
+  assert.equal(codigoTributacaoNacional('17.06'), '170601');
+  assert.equal(codigoTributacaoNacional('1.08'), '010801');
+  assert.equal(codigoTributacaoNacional('13.03.02'), '130302');
+  assert.equal(codigoTributacaoNacional('170602'), '170602');
+});
+
 test('agenda, assinatura .ics e tarefas', async () => {
   assert.equal((await api('POST', '/api/eventos', { titulo: 'X', data: '2026-10-10', hora: '25:00' })).status, 400);
   const ev = await api('POST', '/api/eventos', { titulo: 'Casamento Ana, praia', tipo: 'Casamento', data: '2026-10-10', hora: '16:30', local: 'Maragogi', cliente_id: clienteId });

@@ -290,6 +290,15 @@ export async function configuracoes(raiz) {
     { nome: 'nfse_ambiente', rotulo: 'Ambiente', tipo: 'select', opcoes: [['homologacao', 'Homologação (teste)'], ['producao', 'Produção (validade fiscal)']] },
     { nome: 'nfse_token', rotulo: 'Token da API Focus NFe', tipo: 'password', largura: 'cheio', autocomplete: 'off',
       placeholder: estado.empresa?.nfse_token_configurado ? '•••••••• (configurado — deixe vazio para manter)' : 'Cole aqui o token da Focus NFe' },
+    { nome: 'nfse_padrao', rotulo: 'Padrão da nota', tipo: 'select', largura: 'cheio',
+      opcoes: [['', 'Automático (MEI usa a NFS-e Nacional; os demais, a prefeitura)'], ['municipal', 'Sistema da prefeitura'], ['nacional', 'NFS-e Nacional (gov.br)']] },
+    { tipo: 'titulo', rotulo: 'Piloto automático', ajuda: '— o sistema emite as notas sozinho (exige a Focus NFe acima)' },
+    { nome: 'nfse_auto', rotulo: 'Emitir a nota automaticamente', tipo: 'select', largura: 'cheio',
+      opcoes: [['desligado', 'Não — eu emito cada nota'], ['recebimento', 'Quando o pagamento for recebido (baixa no financeiro)'],
+        ['vencimento', 'No vencimento da cobrança (para enviar junto com a cobrança)']] },
+    { nome: 'nfse_auto_dias', rotulo: 'Dias antes do vencimento', tipo: 'number', placeholder: '0',
+      ajuda: 'Só para "no vencimento". Ex.: 3 = emite 3 dias antes' },
+    { nome: 'fee_auto', rotulo: 'Gerar as mensalidades (fee) sozinho todo mês', tipo: 'select', opcoes: [['0', 'Não'], ['1', 'Sim']] },
   ], estado.empresa || {});
   formEmpresa.els.cep.addEventListener('change', async () => {
     const cep = formEmpresa.els.cep.value.replace(/\D/g, '');
