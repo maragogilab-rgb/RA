@@ -15,6 +15,12 @@ const tentativas = new Map();
 const MAX_TENTATIVAS = 10;
 const JANELA_MS = 15 * 60 * 1000;
 
+// No próprio computador (ERP instalado no Mac) não há bloqueio: só quem está na máquina acessa.
+const LOCAIS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+// Acesso local de verdade: conexão vinda do próprio computador e sem passar por proxy.
+const acessoLocal = (req) => LOCAIS.has(req.socket.remoteAddress) && !req.headers['x-forwarded-for'];
+
 function verificarLimite(ip) {
   const agora = Date.now();
   const t = tentativas.get(ip);
@@ -60,12 +66,13 @@ function registrar(router, db) {
   // ---------- Autenticação ----------
   router.post('/api/login', (ctx) => {
     const ip = ctx.ip;
-    verificarLimite(ip);
+    const local = acessoLocal(ctx.req);
+    if (!local) verificarLimite(ip);
     const email = v.texto(ctx.body.email, 'email', { obrigatorio: true });
     const senha = v.texto(ctx.body.senha, 'senha', { obrigatorio: true, max: 200 });
     const u = db.prepare('SELECT * FROM usuarios WHERE email = ? AND ativo = 1').get(email);
     if (!u || !auth.verificarSenha(senha, u.senha_hash)) {
-      registrarFalha(ip);
+      if (!local) registrarFalha(ip);
       throw erro(401, 'E-mail ou senha inválidos');
     }
     tentativas.delete(ip);
