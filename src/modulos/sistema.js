@@ -5,6 +5,7 @@ const auth = require('../auth');
 const v = require('../validar');
 const { importarPainel } = require('../importar');
 const { transacao } = require('../db');
+const { lerPfx, cnpjDoCertificado } = require('../nfse/pkcs12');
 
 const exigirAdmin = (ctx) => {
   if (ctx.usuario.papel !== 'admin') throw erro(403, 'Acesso restrito a administradores');
@@ -58,6 +59,23 @@ function metasPorArea(empresa) {
   } catch { return {}; }
 }
 const CAMPO_SECRETO = 'nfse_token';
+
+// Resumo do certificado digital guardado (o arquivo e a senha nunca saem do servidor).
+function infoCertificado(empresa) {
+  if (!empresa.nfse_cert) return null;
+  try {
+    const { certificado } = lerPfx(Buffer.from(empresa.nfse_cert, 'base64'), empresa.nfse_cert_senha || '');
+    const validoAte = new Date(certificado.validTo).toISOString();
+    return {
+      titular: (/CN=([^\n]+)/.exec(certificado.subject)?.[1] || '').replace(/:\d{11,14}$/, ''),
+      cnpj: cnpjDoCertificado(certificado),
+      valido_ate: validoAte,
+      dias_restantes: Math.floor((Date.parse(validoAte) - Date.now()) / 86400000),
+    };
+  } catch (e) {
+    return { erro: e.message };
+  }
+}
 
 function registrar(router, db) {
   // Verificação de funcionamento usada pela hospedagem.
@@ -163,8 +181,13 @@ function registrar(router, db) {
   // O token da API de NFS-e nunca é devolvido; a interface só sabe se ele está configurado.
   const publicarEmpresa = () => {
     const e = lerEmpresa(db);
-    const { [CAMPO_SECRETO]: token, ...resto } = e;
-    return { ...resto, nfse_token_configurado: Boolean(token) };
+    const { [CAMPO_SECRETO]: token, nfse_cert: cert, nfse_cert_senha: senhaCert, ...resto } = e;
+    resto.nfse_cert_info = infoCertificado(e);
+    return {
+      ...resto,
+      nfse_token_configurado: Boolean(token),
+      nfse_automatica: (e.nfse_provedor === 'nacional' && Boolean(cert)) || (e.nfse_provedor === 'focusnfe' && Boolean(token)),
+    };
   };
 
   router.get('/api/empresa', () => publicarEmpresa());
@@ -184,7 +207,7 @@ function registrar(router, db) {
     if (cnpj && !v.documentoValido(cnpj)) throw erro(400, 'CNPJ da empresa inválido');
     if (b.codigo_municipio && v.soDigitos(b.codigo_municipio).length !== 7) throw erro(400, 'Código IBGE do município deve ter 7 dígitos');
     v.opcao(b.regime_tributario, 'regime_tributario', ['simples', 'mei', 'presumido', 'real']);
-    v.opcao(b.nfse_provedor, 'nfse_provedor', ['manual', 'focusnfe']);
+    v.opcao(b.nfse_provedor, 'nfse_provedor', ['manual', 'nacional', 'focusnfe']);
     v.opcao(b.nfse_ambiente, 'nfse_ambiente', ['homologacao', 'producao']);
     v.numero(b.aliquota_iss, 'aliquota_iss', { min: 0 });
     v.opcao(b.nfse_padrao, 'nfse_padrao', ['municipal', 'nacional']);
@@ -217,6 +240,38 @@ function registrar(router, db) {
       gravar.push([`empresa.${c}`, v.texto(valor, c, { max }) || '']);
     }
     transacao(db, () => { for (const [chave, valor] of gravar) up.run(chave, valor); });
+    return publicarEmpresa();
+  });
+
+  // ---------- Certificado digital A1 (emissão direta na NFS-e Nacional) ----------
+  router.post('/api/empresa/certificado', (ctx) => {
+    exigirAdmin(ctx);
+    const bruto = String(ctx.body.arquivo || '').replace(/^data:[^,]*,/, '');
+    if (!/^[A-Za-z0-9+/=]+$/.test(bruto)) throw erro(400, 'Envie o arquivo do certificado (.pfx ou .p12)');
+    const arquivo = Buffer.from(bruto, 'base64');
+    if (!arquivo.length || arquivo.length > 200000) throw erro(400, 'Arquivo de certificado inválido');
+    const senha = String(ctx.body.senha ?? '');
+    let cert;
+    try { cert = lerPfx(arquivo, senha).certificado; } catch (e) { throw erro(400, e.message); }
+    if (Date.parse(cert.validTo) < Date.now()) throw erro(400, `Este certificado venceu em ${new Date(cert.validTo).toLocaleDateString('pt-BR')}`);
+    const empresa = lerEmpresa(db);
+    const cnpjCert = cnpjDoCertificado(cert);
+    const cnpjEmpresa = v.soDigitos(empresa.cnpj);
+    if (cnpjCert && cnpjEmpresa && cnpjCert !== cnpjEmpresa) {
+      throw erro(400, `Este certificado é do CNPJ ${cnpjCert}, diferente do CNPJ da empresa (${cnpjEmpresa})`);
+    }
+    const up = db.prepare('INSERT INTO configuracoes (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor');
+    transacao(db, () => {
+      up.run('empresa.nfse_cert', arquivo.toString('base64'));
+      up.run('empresa.nfse_cert_senha', senha);
+      if (cnpjCert && !cnpjEmpresa) up.run('empresa.cnpj', cnpjCert);
+    });
+    return publicarEmpresa();
+  });
+
+  router.delete('/api/empresa/certificado', (ctx) => {
+    exigirAdmin(ctx);
+    db.prepare("DELETE FROM configuracoes WHERE chave IN ('empresa.nfse_cert', 'empresa.nfse_cert_senha')").run();
     return publicarEmpresa();
   });
 
@@ -291,6 +346,11 @@ function registrar(router, db) {
       if (dia <= diaDas && diaDas - dia <= 7) {
         lembretes.push({ tipo: 'das', texto: `DAS do MEI vence dia ${diaDas}${diaDas === dia ? ' (hoje!)' : ` (em ${diaDas - dia} dia(s))`}`, link: 'https://www8.receita.fazenda.gov.br/SimplesNacional/Aplicacoes/ATSPO/pgmei.app/Identificacao' });
       }
+    }
+    const cert = infoCertificado(empresa);
+    if (cert && !cert.erro && cert.dias_restantes <= 30) {
+      lembretes.push({ tipo: 'certificado', texto: cert.dias_restantes < 0 ? 'Certificado digital VENCIDO: as notas automáticas pararam. Renove e envie o novo em Configurações.'
+        : `Certificado digital vence em ${cert.dias_restantes} dia(s). Renove para as notas continuarem saindo.`, link: '#/configuracoes' });
     }
     const tarefasHoje = db.prepare(`SELECT id, titulo, prazo FROM tarefas WHERE feito = 0 AND prazo IS NOT NULL AND prazo <= ? ORDER BY prazo LIMIT 10`).all(hoje);
     for (const t of tarefasHoje) {

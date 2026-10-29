@@ -246,6 +246,8 @@ const COLUNAS_EXTRAS = {
     automatica: 'INTEGER NOT NULL DEFAULT 0',
     // API usada na Focus NFe: 'nfse' (prefeitura) ou 'nfsen' (NFS-e Nacional).
     api: 'TEXT',
+    // XML oficial da NFS-e devolvido pelo governo (NFS-e Nacional).
+    xml_nfse: 'TEXT',
   },
   // Dados exigidos pela NFS-e para o tomador do serviço.
   clientes: {

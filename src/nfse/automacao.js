@@ -18,8 +18,8 @@ const LIMITE_POR_CICLO = 20;
 const CHAVE_ULTIMO = 'nfse_auto.ultimo';
 const GATILHOS = ['recebimento', 'vencimento'];
 
-function criarAutomacao(db, { fetchNfse = globalThis.fetch, log = console.log } = {}) {
-  const notas = criarServicoNotas(db, fetchNfse);
+function criarAutomacao(db, { fetchNfse = globalThis.fetch, requisitarNacional, log = console.log } = {}) {
+  const notas = criarServicoNotas(db, { fetchNfse, requisitarNacional });
   let emAndamento = null;
   let timer = null;
   let espera = null;
@@ -92,7 +92,7 @@ function criarAutomacao(db, { fetchNfse = globalThis.fetch, log = console.log } 
         }
       }
 
-      for (const { id } of db.prepare("SELECT id FROM notas_fiscais WHERE provedor = 'focusnfe' AND status = 'processando' ORDER BY id LIMIT ?").all(LIMITE_POR_CICLO)) {
+      for (const { id } of db.prepare("SELECT id FROM notas_fiscais WHERE provedor IN ('focusnfe', 'nacional') AND status = 'processando' ORDER BY id LIMIT ?").all(LIMITE_POR_CICLO)) {
         if (enviadasAgora.has(id)) continue;
         try {
           contar(await notas.consultar(id));
@@ -128,7 +128,8 @@ function criarAutomacao(db, { fetchNfse = globalThis.fetch, log = console.log } 
       dias: c.dias,
       desde: c.empresa.nfse_auto_desde || null,
       fee_auto: c.feeAuto,
-      padrao: focus.apiDaEmpresa(c.empresa) === 'nfsen' ? 'nacional' : 'municipal',
+      padrao: c.empresa.nfse_provedor === 'nacional' || focus.apiDaEmpresa(c.empresa) === 'nfsen' ? 'nacional' : 'municipal',
+      provedor: c.empresa.nfse_provedor || 'manual',
       ambiente: c.empresa.nfse_ambiente || 'homologacao',
       rodando_no_servidor: Boolean(timer),
       ultimo,

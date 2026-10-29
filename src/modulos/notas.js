@@ -5,6 +5,7 @@ const { erro } = require('../http');
 const v = require('../validar');
 const { lerEmpresa } = require('./sistema');
 const focus = require('../nfse/focusnfe');
+const nacional = require('../nfse/nacional');
 
 const EDITAVEIS = ['rascunho', 'erro'];
 
@@ -31,18 +32,30 @@ function pendencias(empresa, cliente, nota) {
   falta(nota.valor_servicos > 0, 'Nota: valor maior que zero');
   falta(nota.item_lista_servico, mei ? 'Nota: código do serviço (tributação nacional)' : 'Nota: item da lista de serviços (LC 116)');
   if (!mei) falta(nota.aliquota !== null && nota.aliquota !== undefined && nota.aliquota !== '', 'Nota: alíquota do ISS');
-  if (nota.item_lista_servico && empresa.nfse_provedor === 'focusnfe' && focus.apiDaEmpresa(empresa) === 'nfsen') {
+  if (empresa.nfse_provedor === 'nacional') falta(empresa.nfse_cert, 'Empresa: certificado digital A1 (Configurações)');
+  const padraoNacional = empresa.nfse_provedor === 'nacional' || (empresa.nfse_provedor === 'focusnfe' && focus.apiDaEmpresa(empresa) === 'nfsen');
+  if (nota.item_lista_servico && padraoNacional) {
     falta(focus.codigoTributacaoNacional(nota.item_lista_servico).length === 6,
       'Nota: código de tributação nacional com 6 dígitos (ex.: 17.06 ou 170601)');
   }
   return p;
 }
 
-// Emissão automática configurada (Focus NFe com token).
-const automaticaConfigurada = (empresa) => empresa.nfse_provedor === 'focusnfe' && Boolean(empresa.nfse_token);
+// Emissão automática configurada: direto na NFS-e Nacional (certificado A1) ou pela Focus NFe (token).
+const automaticaConfigurada = (empresa) => (empresa.nfse_provedor === 'nacional' && Boolean(empresa.nfse_cert))
+  || (empresa.nfse_provedor === 'focusnfe' && Boolean(empresa.nfse_token));
 
 // Operações sobre notas usadas pelas rotas e pela emissão automática.
-function criarServicoNotas(db, fetchNfse = globalThis.fetch) {
+// opcoes.fetchNfse e opcoes.requisitarNacional substituem as chamadas de rede (testes).
+function criarServicoNotas(db, opcoes = {}) {
+  const fetchNfse = opcoes.fetchNfse || globalThis.fetch;
+  const clienteNacional = (empresa) => {
+    try {
+      return nacional.criarCliente(empresa, { requisitar: opcoes.requisitarNacional });
+    } catch (e) {
+      throw erro(400, e.message);
+    }
+  };
   const buscarCliente = (id) => db.prepare('SELECT * FROM clientes WHERE id = ?').get(id);
   const buscar = (id) => {
     const n = db.prepare(`
@@ -53,6 +66,8 @@ function criarServicoNotas(db, fetchNfse = globalThis.fetch) {
       LEFT JOIN projetos p ON p.id = n.projeto_id LEFT JOIN servicos s ON s.id = n.servico_id
       WHERE n.id = ?`).get(id);
     if (!n) throw erro(404, 'Nota fiscal não encontrada');
+    n.tem_xml = Boolean(n.xml_nfse);
+    delete n.xml_nfse;
     n.pendencias = EDITAVEIS.includes(n.status) ? pendencias(lerEmpresa(db), buscarCliente(n.cliente_id), n) : [];
     return n;
   };
@@ -135,26 +150,66 @@ function criarServicoNotas(db, fetchNfse = globalThis.fetch) {
     return buscar(r.lastInsertRowid);
   };
 
-  // Envia a nota à Focus NFe (prefeitura ou NFS-e Nacional, conforme a configuração).
+  // Número sequencial da DPS (um contador por ambiente, nunca repete).
+  const proximoNumeroDps = (ambiente) => Number(db.prepare(`INSERT INTO configuracoes (chave, valor) VALUES (?, '1')
+    ON CONFLICT(chave) DO UPDATE SET valor = CAST(valor AS INTEGER) + 1 RETURNING valor`).get(`nfse_nacional.numero.${ambiente}`).valor);
+
+  // Guarda o resultado da NFS-e Nacional: XML oficial e, se possível, o PDF (DANFSe).
+  const aplicarNacional = async (id, api, r) => {
+    const { xml, ...campos } = r;
+    if (xml) campos.xml_nfse = xml;
+    atualizar(id, campos);
+    if (r.status === 'emitida' && r.codigo_verificacao) {
+      const atual = db.prepare('SELECT arquivo_id, numero FROM notas_fiscais WHERE id = ?').get(id);
+      if (!atual.arquivo_id) {
+        try {
+          const pdf = await api.danfse(r.codigo_verificacao);
+          const a = db.prepare('INSERT INTO arquivos (nome, tipo, tamanho, conteudo) VALUES (?, ?, ?, ?)')
+            .run(`NFS-e ${atual.numero || id}.pdf`, 'application/pdf', pdf.length, pdf);
+          atualizar(id, { arquivo_id: Number(a.lastInsertRowid) });
+        } catch { /* o PDF pode ser baixado depois pela consulta pública */ }
+      }
+    }
+  };
+
+  // Envia a nota: direto na NFS-e Nacional ou pela Focus NFe, conforme a configuração.
   const emitir = async (id) => {
     const n = buscar(id);
     if (!EDITAVEIS.includes(n.status)) throw erro(409, 'Esta nota já foi enviada');
     if (n.pendencias.length) throw erro(400, `Complete os dados antes de emitir: ${n.pendencias.join('; ')}`);
     const empresa = lerEmpresa(db);
     if (!automaticaConfigurada(empresa)) {
-      throw erro(400, 'Emissão automática não configurada. Configure a Focus NFe em Configurações ou use "Registrar nota emitida" após emitir no portal da prefeitura.');
+      throw erro(400, 'Emissão automática não configurada. Envie o certificado digital em Configurações ou use "Registrar nota emitida" após emitir no portal.');
     }
-    const api = focus.apiDaEmpresa(empresa);
+    const cliente = buscarCliente(n.cliente_id);
+
+    if (empresa.nfse_provedor === 'nacional') {
+      const api = clienteNacional(empresa);
+      const dps = api.montar({ nota: n, empresa, cliente, serie: 1, numero: proximoNumeroDps(api.ambiente) });
+      const reserva = db.prepare(`UPDATE notas_fiscais SET referencia = ?, provedor = 'nacional', api = 'sefin', status = 'processando', mensagem = 'Enviando…'
+        WHERE id = ? AND status IN ('rascunho', 'erro')`).run(dps.id, n.id);
+      if (!reserva.changes) throw erro(409, 'Esta nota já foi enviada');
+      let resultado;
+      try {
+        resultado = await api.emitir(dps);
+      } catch (e) {
+        // Sem resposta: a nota pode ter sido autorizada. Fica "processando" e a consulta confere pelo número da DPS.
+        resultado = { status: 'processando', mensagem: `Sem resposta do sistema da NFS-e (${e.message}). O ERP confere sozinho em alguns minutos.` };
+      }
+      await aplicarNacional(n.id, api, resultado);
+      return buscar(n.id);
+    }
+
+    const tipoApi = focus.apiDaEmpresa(empresa);
     // Cada envio usa uma referência nova para não colidir com uma tentativa anterior que deu erro.
     const referencia = `nf-${n.id}-${Date.now()}`;
     // Reserva a nota antes de enviar: evita envio duplo se a tela e a emissão automática agirem juntas.
     const reserva = db.prepare(`UPDATE notas_fiscais SET referencia = ?, provedor = 'focusnfe', api = ?, status = 'processando', mensagem = 'Enviando…'
-      WHERE id = ? AND status IN ('rascunho', 'erro')`).run(referencia, api, n.id);
+      WHERE id = ? AND status IN ('rascunho', 'erro')`).run(referencia, tipoApi, n.id);
     if (!reserva.changes) throw erro(409, 'Esta nota já foi enviada');
     let resultado;
     try {
-      const cliente = focus.cliente(empresa, fetchNfse);
-      resultado = await cliente.emitir(referencia, focus.payloadPara(api, { nota: n, empresa, cliente: buscarCliente(n.cliente_id) }), api);
+      resultado = await focus.cliente(empresa, fetchNfse).emitir(referencia, focus.payloadPara(tipoApi, { nota: n, empresa, cliente }), tipoApi);
     } catch (e) {
       resultado = { status: 'erro', mensagem: e.message };
     }
@@ -164,18 +219,37 @@ function criarServicoNotas(db, fetchNfse = globalThis.fetch) {
 
   const consultar = async (id) => {
     const n = buscar(id);
+    if (n.provedor === 'nacional') {
+      const api = clienteNacional(lerEmpresa(db));
+      const resultado = await api.consultar(n.referencia).catch((e) => { throw erro(502, e.message); });
+      await aplicarNacional(n.id, api, resultado);
+      return buscar(n.id);
+    }
     if (n.provedor !== 'focusnfe') throw erro(409, 'Nota registrada manualmente; não há o que consultar');
     const resultado = await focus.cliente(lerEmpresa(db), fetchNfse).consultar(n.referencia, n.api || 'nfse').catch((e) => { throw erro(502, e.message); });
     atualizar(n.id, resultado);
     return buscar(n.id);
   };
 
-  return { buscar, buscarCliente, sugerir, ler, inserir, atualizar, emitir, consultar };
+  const cancelar = async (id, justificativa) => {
+    const n = buscar(id);
+    if (n.status !== 'emitida') throw erro(409, 'Somente notas emitidas podem ser canceladas');
+    if (n.provedor === 'nacional') {
+      const r = await clienteNacional(lerEmpresa(db)).cancelar(n.codigo_verificacao, justificativa).catch((e) => { throw erro(502, e.message); });
+      if (r.status !== 'cancelada') throw erro(409, r.mensagem || 'O sistema da NFS-e não confirmou o cancelamento');
+    } else if (n.provedor === 'focusnfe') {
+      const r = await focus.cliente(lerEmpresa(db), fetchNfse).cancelar(n.referencia, justificativa, n.api || 'nfse').catch((e) => { throw erro(502, e.message); });
+      if (r.status !== 'cancelada') throw erro(409, r.mensagem || 'A prefeitura não confirmou o cancelamento');
+    }
+    atualizar(n.id, { status: 'cancelada', mensagem: `Cancelada: ${justificativa}` });
+    return buscar(n.id);
+  };
+
+  return { buscar, buscarCliente, sugerir, ler, inserir, atualizar, emitir, consultar, cancelar };
 }
 
 function registrar(router, db, opcoes = {}) {
-  const fetchNfse = opcoes.fetchNfse || globalThis.fetch;
-  const { buscar, buscarCliente, sugerir, ler, inserir, atualizar, emitir, consultar } = criarServicoNotas(db, fetchNfse);
+  const { buscar, buscarCliente, sugerir, ler, inserir, atualizar, emitir, consultar, cancelar } = criarServicoNotas(db, opcoes);
   const automacao = opcoes.automacao;
 
   // Situação da emissão automática (antes de /api/notas/:id para não confundir as rotas).
@@ -192,7 +266,7 @@ function registrar(router, db, opcoes = {}) {
     return db.prepare(`
       SELECT n.*, c.nome AS cliente_nome FROM notas_fiscais n JOIN clientes c ON c.id = n.cliente_id
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-      ORDER BY n.id DESC LIMIT 1000`).all(...params);
+      ORDER BY n.id DESC LIMIT 1000`).all(...params).map(({ xml_nfse: xml, ...n }) => ({ ...n, tem_xml: Boolean(xml) }));
   });
 
   router.get('/api/notas/sugestao', ({ query }) => {
@@ -222,7 +296,7 @@ function registrar(router, db, opcoes = {}) {
     db.prepare('DELETE FROM notas_fiscais WHERE id = ?').run(params.id);
   });
 
-  // Emissão pela Focus NFe.
+  // Emissão automática (NFS-e Nacional ou Focus NFe).
   router.post('/api/notas/:id/emitir', ({ params }) => emitir(params.id));
   router.post('/api/notas/:id/consultar', ({ params }) => consultar(params.id));
 
@@ -263,17 +337,18 @@ function registrar(router, db, opcoes = {}) {
     ctx.bruto = { tipo: a.tipo, nome: a.nome, corpo: Buffer.from(a.conteudo) };
   });
 
-  router.post('/api/notas/:id/cancelar', async ({ params, body }) => {
-    const n = buscar(params.id);
-    if (n.status !== 'emitida') throw erro(409, 'Somente notas emitidas podem ser canceladas');
+  // XML oficial da NFS-e (guarde junto com a contabilidade).
+  router.get('/api/notas/:id/xml', (ctx) => {
+    const n = buscar(ctx.params.id);
+    const { xml_nfse: xml } = db.prepare('SELECT xml_nfse FROM notas_fiscais WHERE id = ?').get(n.id);
+    if (!xml) throw erro(404, 'Esta nota não tem XML guardado');
+    ctx.bruto = { tipo: 'application/xml; charset=utf-8', nome: `NFS-e ${n.numero || n.id}.xml`, corpo: Buffer.from(xml, 'utf8') };
+  });
+
+  router.post('/api/notas/:id/cancelar', ({ params, body }) => {
     const justificativa = v.texto(body.justificativa, 'justificativa', { obrigatorio: true, max: 255 });
     if (justificativa.length < 15) throw erro(400, 'A justificativa deve ter pelo menos 15 caracteres');
-    if (n.provedor === 'focusnfe') {
-      const resultado = await focus.cliente(lerEmpresa(db), fetchNfse).cancelar(n.referencia, justificativa, n.api || 'nfse').catch((e) => { throw erro(502, e.message); });
-      if (resultado.status !== 'cancelada') throw erro(409, resultado.mensagem || 'A prefeitura não confirmou o cancelamento');
-    }
-    atualizar(n.id, { status: 'cancelada', mensagem: `Cancelada: ${justificativa}` });
-    return buscar(n.id);
+    return cancelar(params.id, justificativa);
   });
 }
 

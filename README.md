@@ -87,6 +87,10 @@ sem inscrição municipal nem alíquota de ISS, que já é paga no DAS. Sem a Fo
 
 Formas de emissão:
 
+- **Automática direto no gov.br (NFS-e Nacional, sem mensalidade)**: envie o certificado digital A1 (.pfx/.p12) em
+  Configurações e escolha *Automática — direto no gov.br*. O ERP monta a DPS no leiaute oficial 1.01, assina (XMLDSig)
+  e envia à Sefin Nacional com TLS mútuo. A resposta é na hora: número da nota, XML oficial e o PDF (DANFSe) ficam guardados.
+  Cancelamento pelo evento oficial. Teste primeiro no ambiente *Teste* (produção restrita do gov.br).
 - **Manual (padrão)**: use **Copiar dados** e cole no portal NFS-e da prefeitura. Depois, clique em **Registrar nota emitida**
   e informe o número. Funciona em qualquer município, sem custo extra.
 - **Automática (Focus NFe)**: crie uma conta em [focusnfe.com.br](https://focusnfe.com.br), cadastre a empresa e envie
@@ -163,6 +167,9 @@ src/db.js              # esquema do banco e migrações automáticas
 src/modulos/           # cadastros, projetos, contratos, financeiro, notas, sistema
 src/nfse/focusnfe.js   # integração com a API de NFS-e da Focus NFe (prefeitura e NFS-e Nacional)
 src/nfse/automacao.js  # piloto automático: cria, envia e acompanha as notas sozinho
+src/nfse/nacional.js   # NFS-e Nacional direto no gov.br: DPS, assinatura XMLDSig e TLS mútuo
+src/nfse/pkcs12.js     # leitura do certificado A1 (.pfx), inclusive formatos antigos (RC2/3DES)
+src/nfse/icp-brasil.pem # raízes ICP-Brasil, usadas só para conectar à NFS-e Nacional
 public/                # interface web (HTML/CSS/JS puro, sem build)
 scripts/dados-demo.js  # dados de exemplo
 test/                  # testes da API

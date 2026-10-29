@@ -30,10 +30,17 @@ async function fetchFocusFalso(url, init) {
   return new Response(JSON.stringify(respostaFocus), { status: 200 });
 }
 
+// Simula o servidor da NFS-e Nacional (gov.br): cada teste define como responder.
+const servidorGov = { chamadas: [], responder: () => ({ status: 404, tipo: 'application/json', corpo: Buffer.from('{}') }) };
+async function requisitarGovFalso(metodo, url, corpo) {
+  servidorGov.chamadas.push({ metodo, url, corpo });
+  return servidorGov.responder(metodo, url, corpo);
+}
+
 before(async () => {
   const db = abrir(':memory:');
   garantirAdmin(db, { email: 'admin@teste.com', senha: 'senha-forte-1' });
-  servidor = http.createServer(criarApp(db, { log: false, fetchNfse: fetchFocusFalso }));
+  servidor = http.createServer(criarApp(db, { log: false, fetchNfse: fetchFocusFalso, requisitarNacional: requisitarGovFalso }));
   await new Promise((r) => servidor.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${servidor.address().port}`;
 });
@@ -429,4 +436,86 @@ test('login no próprio computador não bloqueia por tentativas erradas', async 
     assert.equal((await api('POST', '/api/login', { email: 'admin@teste.com', senha: 'errada' }, { semCookie: true })).status, 401);
   }
   assert.equal((await api('POST', '/api/login', { email: 'admin@teste.com', senha: 'senha-forte-1' })).status, 200);
+});
+
+test('NFS-e Nacional direto no gov.br: certificado, emissão, erro, queda de conexão e cancelamento', async () => {
+  const zlib = require('node:zlib');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const pfx = (nome) => fs.readFileSync(path.join(__dirname, 'fixtures', nome)).toString('base64');
+  const chave = '27045002211222333000181000000000001526101234567890'.slice(0, 50);
+  const nfseXml = '<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse"><infNFSe><nNFSe>15</nNFSe><dhProc>2026-10-29T10:00:00-03:00</dhProc></infNFSe></NFSe>';
+  const gz = (xml) => zlib.gzipSync(Buffer.from(xml)).toString('base64');
+  const json = (status, corpo) => ({ status, tipo: 'application/json', corpo: Buffer.from(JSON.stringify(corpo)) });
+
+  // O certificado não pode ir para o navegador.
+  assert.match((await api('POST', '/api/empresa/certificado', { arquivo: pfx('certificado-teste.pfx'), senha: 'errada' })).dados.erro, /Senha do certificado incorreta/);
+  const enviado = await api('POST', '/api/empresa/certificado', { arquivo: pfx('certificado-teste-legado.pfx'), senha: 'senha123' });
+  assert.equal(enviado.status, 200);
+  assert.equal(enviado.dados.nfse_cert_info.cnpj, '11222333000181');
+  const emp = (await api('PUT', '/api/empresa', { regime_tributario: 'mei', nfse_provedor: 'nacional', nfse_ambiente: 'homologacao', item_lista_servico: '17.06' })).dados;
+  assert.equal(emp.nfse_cert, undefined);
+  assert.equal(emp.nfse_cert_senha, undefined);
+  assert.equal(emp.nfse_automatica, true);
+
+  const cli = (await api('POST', '/api/clientes', {
+    nome: 'Pousada Coqueiral Ltda', tipo_pessoa: 'PJ', documento: '11.444.777/0001-61', email_nf: 'nf@coqueiral.com',
+    cep: '57955-000', logradouro: 'Rua da Praia', numero: '20', bairro: 'Centro', cidade: 'Maragogi', uf: 'AL', codigo_municipio: '2704500',
+  })).dados;
+  const nova = async (texto) => (await api('POST', '/api/notas', { cliente_id: cli.id, discriminacao: texto, valor_servicos: 80000, item_lista_servico: '17.06' })).dados;
+
+  // 1) Autorizada: guarda número, XML e o PDF oficial.
+  servidorGov.responder = (metodo, url) => {
+    if (metodo === 'POST' && url.endsWith('/nfse')) return json(201, { chaveAcesso: chave, idDps: 'x', nfseXmlGZipB64: gz(nfseXml) });
+    if (url.includes('/danfse/')) return { status: 200, tipo: 'application/pdf', corpo: Buffer.from('%PDF-1.4 teste') };
+    return json(404, {});
+  };
+  const n1 = await nova('Cobertura fotográfica do evento');
+  const r1 = (await api('POST', `/api/notas/${n1.id}/emitir`)).dados;
+  assert.equal(r1.status, 'emitida', r1.mensagem);
+  assert.equal(r1.numero, '15');
+  assert.equal(r1.codigo_verificacao, chave);
+  assert.equal(r1.provedor, 'nacional');
+  assert.equal(r1.tem_xml, true);
+  assert.match(r1.arquivo_nome, /NFS-e 15\.pdf/);
+  const envio = servidorGov.chamadas.find((c) => c.metodo === 'POST');
+  assert.equal(envio.url, 'https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse');
+  const dps = zlib.gunzipSync(Buffer.from(envio.corpo.dpsXmlGZipB64, 'base64')).toString();
+  for (const trecho of ['<tpAmb>2</tpAmb>', '<nDPS>1</nDPS>', '<opSimpNac>2</opSimpNac>', '<cTribNac>170601</cTribNac>', '<vServ>800.00</vServ>',
+    '<CNPJ>11444777000161</CNPJ>', '<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">']) assert.ok(dps.includes(trecho), trecho);
+  assert.ok(!dps.includes('<pAliq>'), 'MEI não informa alíquota');
+  const xml = await fetch(`${base}/api/notas/${n1.id}/xml`, { headers: { Cookie: cookie } });
+  assert.equal(await xml.text(), nfseXml);
+
+  // 2) Recusada: mostra o motivo do governo e usa um número de DPS novo.
+  servidorGov.responder = () => json(400, { erros: [{ Codigo: 'E0310', Descricao: 'Código de tributação nacional inexistente' }] });
+  const n2 = await nova('Gestão de redes sociais');
+  const r2 = (await api('POST', `/api/notas/${n2.id}/emitir`)).dados;
+  assert.equal(r2.status, 'erro');
+  assert.match(r2.mensagem, /E0310: Código de tributação nacional inexistente/);
+  assert.ok(zlib.gunzipSync(Buffer.from(servidorGov.chamadas.at(-1).corpo.dpsXmlGZipB64, 'base64')).toString().includes('<nDPS>2</nDPS>'));
+
+  // 3) Conexão caiu no envio: fica "processando" e a emissão automática confere pelo número da DPS.
+  servidorGov.responder = () => { throw new Error('socket hang up'); };
+  const n3 = await nova('Filmagem com drone');
+  const r3 = (await api('POST', `/api/notas/${n3.id}/emitir`)).dados;
+  assert.equal(r3.status, 'processando');
+  servidorGov.responder = (metodo, url) => {
+    if (url.includes('/dps/DPS')) return json(200, { chaveAcesso: chave });
+    if (url.endsWith(`/nfse/${chave}`)) return json(200, { chaveAcesso: chave, nfseXmlGZipB64: gz(nfseXml) });
+    return json(404, {});
+  };
+  await api('POST', '/api/notas/automacao/executar');
+  assert.equal((await api('GET', `/api/notas/${n3.id}`)).dados.status, 'emitida');
+
+  // 4) Cancelamento pelo evento oficial.
+  servidorGov.responder = () => json(201, { eventoXmlGZipB64: gz('<evento/>') });
+  const c = await api('POST', `/api/notas/${n1.id}/cancelar`, { justificativa: 'Serviço emitido em duplicidade' });
+  assert.equal(c.dados.status, 'cancelada');
+  const pedido = servidorGov.chamadas.at(-1);
+  assert.equal(pedido.url, `https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse/${chave}/eventos`);
+  const ev = zlib.gunzipSync(Buffer.from(pedido.corpo.pedidoRegistroEventoXmlGZipB64, 'base64')).toString();
+  assert.ok(ev.includes(`<infPedReg Id="PRE${chave}101101">`));
+
+  await api('PUT', '/api/empresa', { regime_tributario: 'simples', nfse_provedor: 'manual' });
 });
