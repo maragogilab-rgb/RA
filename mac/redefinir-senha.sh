@@ -56,5 +56,9 @@ ERP_DB="$DB" ERP_EMAIL="$EMAIL" ERP_SENHA="$SENHA" roda_node "
   db.close();" || falha "Não foi possível trocar a senha."
 unset SENHA SENHA2
 
+# Reinicia o ERP para liberar o bloqueio de "muitas tentativas de login".
+launchctl kickstart -k "gui/$(id -u)/com.maragogilab.erp" 2>/dev/null || true
+sleep 2
+
 printf '\n\033[1;32mPronto! Entre no ERP com o e-mail %s e a senha nova.\033[0m\n' "$EMAIL"
 [ -x "$PASTA/app/mac/abrir.sh" ] && /bin/bash "$PASTA/app/mac/abrir.sh" || true
