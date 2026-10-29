@@ -37,7 +37,9 @@ const CAMPOS_EMPRESA = ['nome', 'razao_social', 'cnpj', 'inscricao_municipal', '
   'termos_orcamento', 'pix_chave', 'pix_titular', 'dados_bancarios', 'logo', 'teto_mei',
   // Metas, reservas, lembretes, comissão e modelo de e-mail da NF.
   'meta_mensal', 'meta_anual', 'metas_area', 'reserva_imposto_pct', 'reserva_equip_pct',
-  'orcamento_parado_dias', 'pos_venda_dias', 'dia_das', 'comissao_parceiro_pct', 'email_nf_assunto', 'email_nf_corpo'];
+  'orcamento_parado_dias', 'pos_venda_dias', 'dia_das', 'comissao_parceiro_pct', 'email_nf_assunto', 'email_nf_corpo',
+  // Emissão automática: padrão da nota, quando emitir, antecedência, desde quando e mensalidades automáticas.
+  'nfse_padrao', 'nfse_auto', 'nfse_auto_dias', 'nfse_auto_desde', 'fee_auto'];
 
 // Áreas de negócio padrão (as metas por área podem trazer outras).
 const AREAS_PADRAO = ['Corporativo (marcas, shows, eventos)', 'Eventos sociais (casamentos)',
@@ -178,6 +180,14 @@ function registrar(router, db) {
     v.opcao(b.nfse_provedor, 'nfse_provedor', ['manual', 'focusnfe']);
     v.opcao(b.nfse_ambiente, 'nfse_ambiente', ['homologacao', 'producao']);
     v.numero(b.aliquota_iss, 'aliquota_iss', { min: 0 });
+    v.opcao(b.nfse_padrao, 'nfse_padrao', ['municipal', 'nacional']);
+    v.opcao(b.nfse_auto, 'nfse_auto', ['desligado', 'recebimento', 'vencimento']);
+    v.opcao(b.fee_auto, 'fee_auto', ['0', '1']);
+    if (v.inteiro(b.nfse_auto_dias, 'nfse_auto_dias', { min: 0 }) > 30) throw erro(400, 'A antecedência da emissão vai de 0 a 30 dias');
+    // Ao ligar a emissão automática, só entram contas a partir de hoje (nada de emitir o histórico antigo).
+    const atual = lerEmpresa(db);
+    const ligando = ['recebimento', 'vencimento'].includes(b.nfse_auto) && !['recebimento', 'vencimento'].includes(atual.nfse_auto);
+    b.nfse_auto_desde = ligando ? v.hoje() : atual.nfse_auto_desde;
     const up = db.prepare('INSERT INTO configuracoes (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor');
     // Valida tudo antes de gravar e grava só os campos enviados (os demais ficam como estão).
     const gravar = [];

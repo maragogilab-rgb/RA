@@ -4,7 +4,7 @@ const { erro } = require('../http');
 const { transacao } = require('../db');
 const v = require('../validar');
 
-function registrar(router, db) {
+function registrar(router, db, opcoes = {}) {
   const buscar = (id) => {
     const r = db.prepare('SELECT ct.*, c.nome AS cliente_nome FROM contratos ct JOIN clientes c ON c.id = ct.cliente_id WHERE ct.id = ?').get(id);
     if (!r) throw erro(404, 'Contrato não encontrado');
@@ -61,26 +61,32 @@ function registrar(router, db) {
   });
 
   // Gera as cobranças de uma competência (AAAA-MM) para todos os contratos vigentes.
-  // Idempotente: contratos já cobrados naquele mês são ignorados.
   router.post('/api/contratos/gerar-cobrancas', (ctx) => {
     const competencia = String(ctx.body.competencia || v.hoje().slice(0, 7));
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(competencia)) throw erro(400, 'Competência deve estar no formato AAAA-MM');
-    const inicioMes = `${competencia}-01`;
-    const proximoMes = v.somarMeses(inicioMes, 1);
-    const vigentes = db.prepare(`
-      SELECT * FROM contratos WHERE ativo = 1 AND inicio < ? AND (fim IS NULL OR fim >= ?)
-        AND NOT EXISTS (SELECT 1 FROM lancamentos l WHERE l.contrato_id = contratos.id AND l.competencia = ?)`)
-      .all(proximoMes, inicioMes, competencia);
-    const [a, m] = competencia.split('-');
-    const ins = db.prepare(`INSERT INTO lancamentos (tipo, descricao, categoria, valor, vencimento, origem, cliente_id, contrato_id, competencia, usuario_id, area)
-      VALUES ('receber', ?, 'Fee mensal', ?, ?, 'contrato', ?, ?, ?, ?, ?)`);
-    transacao(db, () => {
-      for (const c of vigentes) {
-        ins.run(`${c.descricao} - ${m}/${a}`, c.valor, `${competencia}-${String(c.dia_vencimento).padStart(2, '0')}`, c.cliente_id, c.id, competencia, ctx.usuario.id, c.area);
-      }
-    });
-    return { competencia, geradas: vigentes.length, total: vigentes.reduce((s, c) => s + c.valor, 0) };
+    const r = gerarCobrancas(db, competencia, ctx.usuario.id);
+    opcoes.automacao?.disparar();
+    return r;
   });
 }
 
-module.exports = { registrar };
+// Idempotente: contratos já cobrados naquele mês são ignorados.
+function gerarCobrancas(db, competencia, usuarioId = null) {
+  const inicioMes = `${competencia}-01`;
+  const proximoMes = v.somarMeses(inicioMes, 1);
+  const vigentes = db.prepare(`
+    SELECT * FROM contratos WHERE ativo = 1 AND inicio < ? AND (fim IS NULL OR fim >= ?)
+      AND NOT EXISTS (SELECT 1 FROM lancamentos l WHERE l.contrato_id = contratos.id AND l.competencia = ?)`)
+    .all(proximoMes, inicioMes, competencia);
+  const [a, m] = competencia.split('-');
+  const ins = db.prepare(`INSERT INTO lancamentos (tipo, descricao, categoria, valor, vencimento, origem, cliente_id, contrato_id, competencia, usuario_id, area)
+    VALUES ('receber', ?, 'Fee mensal', ?, ?, 'contrato', ?, ?, ?, ?, ?)`);
+  transacao(db, () => {
+    for (const c of vigentes) {
+      ins.run(`${c.descricao} - ${m}/${a}`, c.valor, `${competencia}-${String(c.dia_vencimento).padStart(2, '0')}`, c.cliente_id, c.id, competencia, usuarioId, c.area);
+    }
+  });
+  return { competencia, geradas: vigentes.length, total: vigentes.reduce((s, c) => s + c.valor, 0) };
+}
+
+module.exports = { registrar, gerarCobrancas };

@@ -39,7 +39,13 @@ servidor.listen(PORTA, HOST, () => {
   console.log(`ERP rodando em http://localhost:${PORTA}`);
 });
 
+// Emissão automática de NFS-e: verifica a cada ERP_NFSE_INTERVALO minutos (padrão 2). ERP_NFSE_AUTO=0 desliga.
+if (process.env.ERP_NFSE_AUTO !== '0') {
+  app.automacao.iniciar((Number(process.env.ERP_NFSE_INTERVALO) || 2) * 60 * 1000);
+}
+
 function encerrar() {
+  app.automacao.parar();
   servidor.close(() => {
     db.close();
     process.exit(0);

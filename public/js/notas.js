@@ -106,8 +106,41 @@ export async function lista(raiz) {
     : h('div', { class: 'faixa faixa-info' }, 'Modo manual: o sistema prepara os dados da nota, você emite no portal da prefeitura e registra o número aqui. ',
       estado.usuario.papel === 'admin' ? h('a', { href: '#/configuracoes' }, 'Configurar emissão automática →') : null);
 
-  trocar(raiz, cabecalho('Notas fiscais', btn('Nova nota', () => abrirNota(), 'btn-primario')), modo, f.el, area);
+  const piloto = h('div');
+  const mostrarPiloto = (sit) => {
+    if (!sit.configurada || sit.gatilho === 'desligado') {
+      trocar(piloto, sit.configurada && estado.usuario.papel === 'admin'
+        ? h('p', { class: 'mudo' }, 'Piloto automático desligado. ', h('a', { href: '#/configuracoes' }, 'Ligar a emissão automática →'))
+        : null);
+      return;
+    }
+    const quando = sit.gatilho === 'recebimento' ? 'quando o pagamento é recebido'
+      : `no vencimento${sit.dias ? ` (${sit.dias} dia(s) antes)` : ''}`;
+    const u = sit.ultimo;
+    trocar(piloto, h('div', { class: 'faixa faixa-ok' },
+      h('strong', {}, 'Piloto automático ligado: '),
+      `as notas são criadas e enviadas sozinhas ${quando}, pela ${sit.padrao === 'nacional' ? 'NFS-e Nacional' : 'prefeitura'}`,
+      sit.desde ? ` (contas a partir de ${dataBR(sit.desde)})` : '', '.',
+      sit.fee_auto ? ' As mensalidades também são geradas todo mês.' : '',
+      h('br'),
+      u ? `Última verificação: ${new Date(u.quando).toLocaleString('pt-BR')}.` : 'Ainda não verificou.',
+      sit.aguardando_dados ? h('span', {}, ' ', h('strong', {}, `${sit.aguardando_dados} nota(s) esperando dados do cadastro`), ' — veja os rascunhos.') : '',
+      sit.recusadas ? h('span', {}, ' ', h('strong', {}, `${sit.recusadas} recusada(s) pela prefeitura`), ' — abra para ver o motivo.') : '',
+      u?.falhas?.length ? h('span', {}, ' Falhas: ', u.falhas.join(' | ')) : '',
+      ' ',
+      btn('Verificar agora', async () => {
+        try {
+          const { resultado: r, situacao } = await POST('/notas/automacao/executar');
+          aviso(`Notas criadas: ${r.criadas} · enviadas: ${r.enviadas} · autorizadas: ${r.emitidas}${r.recusadas ? ` · recusadas: ${r.recusadas}` : ''}`);
+          mostrarPiloto(situacao);
+          await carregar();
+        } catch (e) { aviso(e.message, 'erro'); }
+      }, 'btn-pequeno')));
+  };
+
+  trocar(raiz, cabecalho('Notas fiscais', btn('Nova nota', () => abrirNota(), 'btn-primario')), modo, piloto, f.el, area);
   await carregar();
+  try { mostrarPiloto(await GET('/notas/automacao')); } catch { /* sem situação, segue sem a faixa */ }
 }
 
 export async function detalhe(raiz, { id }) {
@@ -233,6 +266,7 @@ export async function detalhe(raiz, { id }) {
   trocar(raiz,
     cabecalho(n.numero ? `NFS-e nº ${n.numero}` : n.status === 'rascunho' ? `Nota fiscal (rascunho #${n.id})` : `Nota fiscal #${n.id}`, ...acoes),
     n.pendencias.length ? h('div', { class: 'faixa faixa-info' }, h('strong', {}, 'Faltam dados para emitir:'),
+      n.automatica ? h('p', {}, 'Esta nota foi criada pelo piloto automático e será enviada sozinha assim que os dados abaixo forem completados.') : null,
       h('ul', {}, n.pendencias.map((p) => h('li', {}, p.includes('Configurações') ? h('a', { href: '#/configuracoes' }, p)
         : p.startsWith('Cliente') ? h('a', { href: '#/clientes' }, p) : p)))) : null,
     n.status === 'erro' && n.mensagem ? h('div', { class: 'faixa faixa-alerta', role: 'alert' }, h('strong', {}, 'Recusada: '), n.mensagem) : null,
@@ -249,7 +283,8 @@ export async function detalhe(raiz, { id }) {
       n.codigo_verificacao ? info('Código de verificação', n.codigo_verificacao) : null,
       n.data_emissao ? info('Emissão', dataBR(n.data_emissao)) : null,
       n.projeto_id ? info('Projeto', h('a', { href: `#/projetos/${n.projeto_id}` }, `#${n.projeto_id} ${n.projeto_titulo || ''}`)) : null,
-      info('Emissão via', n.provedor === 'focusnfe' ? 'Focus NFe (automática)' : 'Portal / Emissor Nacional (manual)'),
+      info('Emissão via', n.provedor === 'focusnfe' ? `Focus NFe — ${n.api === 'nfsen' ? 'NFS-e Nacional' : 'prefeitura'}` : 'Portal / Emissor Nacional (manual)'),
+      n.automatica ? info('Origem', 'Criada pelo piloto automático') : null,
       n.arquivo_nome ? info('PDF anexado', h('a', { href: `/api/notas/${id}/arquivo`, target: '_blank', rel: 'noopener' }, n.arquivo_nome)) : null),
       h('div', { class: 'escopo' }, h('h3', {}, 'Discriminação'), h('p', {}, n.discriminacao)),
       n.status === 'cancelada' && n.mensagem ? h('p', { class: 'mudo' }, n.mensagem) : null),

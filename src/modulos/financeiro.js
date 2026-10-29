@@ -30,7 +30,7 @@ const SELECT_LANC = `
   LEFT JOIN fornecedores f ON f.id = l.fornecedor_id
   LEFT JOIN projetos p ON p.id = l.projeto_id`;
 
-function registrar(router, db) {
+function registrar(router, db, opcoes = {}) {
   const buscar = (id) => {
     const r = db.prepare(`${SELECT_LANC} WHERE l.id = ?`).get(id);
     if (!r) throw erro(404, 'Lançamento não encontrado');
@@ -83,6 +83,7 @@ function registrar(router, db) {
         status, pago_em, valor_pago, usuario_id, area)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(d.tipo, d.descricao, d.categoria, d.valor, d.vencimento, d.cliente_id, d.fornecedor_id,
       d.projeto_id, pagoEm ? 'pago' : 'aberto', pagoEm, pagoEm ? d.valor : null, ctx.usuario.id, area);
+    opcoes.automacao?.disparar();
     ctx.status = 201;
     return buscar(r.lastInsertRowid);
   });
@@ -102,6 +103,8 @@ function registrar(router, db) {
     const pagoEm = v.data(body.data, 'data') || v.hoje();
     const valorPago = v.centavos(body.valor_pago, 'valor_pago', { padrao: atual.valor });
     db.prepare("UPDATE lancamentos SET status = 'pago', pago_em = ?, valor_pago = ? WHERE id = ?").run(pagoEm, valorPago, params.id);
+    // Recebimento pode disparar a emissão automática da nota.
+    opcoes.automacao?.disparar();
     return buscar(params.id);
   });
 

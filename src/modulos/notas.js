@@ -31,12 +31,18 @@ function pendencias(empresa, cliente, nota) {
   falta(nota.valor_servicos > 0, 'Nota: valor maior que zero');
   falta(nota.item_lista_servico, mei ? 'Nota: código do serviço (tributação nacional)' : 'Nota: item da lista de serviços (LC 116)');
   if (!mei) falta(nota.aliquota !== null && nota.aliquota !== undefined && nota.aliquota !== '', 'Nota: alíquota do ISS');
+  if (nota.item_lista_servico && empresa.nfse_provedor === 'focusnfe' && focus.apiDaEmpresa(empresa) === 'nfsen') {
+    falta(focus.codigoTributacaoNacional(nota.item_lista_servico).length === 6,
+      'Nota: código de tributação nacional com 6 dígitos (ex.: 17.06 ou 170601)');
+  }
   return p;
 }
 
-function registrar(router, db, opcoes = {}) {
-  const fetchNfse = opcoes.fetchNfse || globalThis.fetch;
+// Emissão automática configurada (Focus NFe com token).
+const automaticaConfigurada = (empresa) => empresa.nfse_provedor === 'focusnfe' && Boolean(empresa.nfse_token);
 
+// Operações sobre notas usadas pelas rotas e pela emissão automática.
+function criarServicoNotas(db, fetchNfse = globalThis.fetch) {
   const buscarCliente = (id) => db.prepare('SELECT * FROM clientes WHERE id = ?').get(id);
   const buscar = (id) => {
     const n = db.prepare(`
@@ -122,6 +128,60 @@ function registrar(router, db, opcoes = {}) {
     db.prepare(`UPDATE notas_fiscais SET ${chaves.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`).run(...chaves.map((c) => campos[c]), id);
   };
 
+  const inserir = (dados, { usuarioId = null, automatica = false } = {}) => {
+    const d = ler(dados);
+    const r = db.prepare(`INSERT INTO notas_fiscais (referencia, ${CAMPOS.join(', ')}, usuario_id, automatica) VALUES (?, ${CAMPOS.map(() => '?').join(', ')}, ?, ?)`)
+      .run(`nf-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`, ...CAMPOS.map((c) => d[c]), usuarioId, automatica ? 1 : 0);
+    return buscar(r.lastInsertRowid);
+  };
+
+  // Envia a nota à Focus NFe (prefeitura ou NFS-e Nacional, conforme a configuração).
+  const emitir = async (id) => {
+    const n = buscar(id);
+    if (!EDITAVEIS.includes(n.status)) throw erro(409, 'Esta nota já foi enviada');
+    if (n.pendencias.length) throw erro(400, `Complete os dados antes de emitir: ${n.pendencias.join('; ')}`);
+    const empresa = lerEmpresa(db);
+    if (!automaticaConfigurada(empresa)) {
+      throw erro(400, 'Emissão automática não configurada. Configure a Focus NFe em Configurações ou use "Registrar nota emitida" após emitir no portal da prefeitura.');
+    }
+    const api = focus.apiDaEmpresa(empresa);
+    // Cada envio usa uma referência nova para não colidir com uma tentativa anterior que deu erro.
+    const referencia = `nf-${n.id}-${Date.now()}`;
+    // Reserva a nota antes de enviar: evita envio duplo se a tela e a emissão automática agirem juntas.
+    const reserva = db.prepare(`UPDATE notas_fiscais SET referencia = ?, provedor = 'focusnfe', api = ?, status = 'processando', mensagem = 'Enviando…'
+      WHERE id = ? AND status IN ('rascunho', 'erro')`).run(referencia, api, n.id);
+    if (!reserva.changes) throw erro(409, 'Esta nota já foi enviada');
+    let resultado;
+    try {
+      const cliente = focus.cliente(empresa, fetchNfse);
+      resultado = await cliente.emitir(referencia, focus.payloadPara(api, { nota: n, empresa, cliente: buscarCliente(n.cliente_id) }), api);
+    } catch (e) {
+      resultado = { status: 'erro', mensagem: e.message };
+    }
+    atualizar(n.id, resultado);
+    return buscar(n.id);
+  };
+
+  const consultar = async (id) => {
+    const n = buscar(id);
+    if (n.provedor !== 'focusnfe') throw erro(409, 'Nota registrada manualmente; não há o que consultar');
+    const resultado = await focus.cliente(lerEmpresa(db), fetchNfse).consultar(n.referencia, n.api || 'nfse').catch((e) => { throw erro(502, e.message); });
+    atualizar(n.id, resultado);
+    return buscar(n.id);
+  };
+
+  return { buscar, buscarCliente, sugerir, ler, inserir, atualizar, emitir, consultar };
+}
+
+function registrar(router, db, opcoes = {}) {
+  const fetchNfse = opcoes.fetchNfse || globalThis.fetch;
+  const { buscar, buscarCliente, sugerir, ler, inserir, atualizar, emitir, consultar } = criarServicoNotas(db, fetchNfse);
+  const automacao = opcoes.automacao;
+
+  // Situação da emissão automática (antes de /api/notas/:id para não confundir as rotas).
+  router.get('/api/notas/automacao', () => automacao.situacao());
+  router.post('/api/notas/automacao/executar', () => automacao.executar());
+
   router.get('/api/notas', ({ query }) => {
     const where = [];
     const params = [];
@@ -144,11 +204,9 @@ function registrar(router, db, opcoes = {}) {
   router.get('/api/notas/:id', ({ params }) => buscar(params.id));
 
   router.post('/api/notas', (ctx) => {
-    const d = ler(ctx.body);
-    const r = db.prepare(`INSERT INTO notas_fiscais (referencia, ${CAMPOS.join(', ')}, usuario_id) VALUES (?, ${CAMPOS.map(() => '?').join(', ')}, ?)`)
-      .run(`nf-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`, ...CAMPOS.map((c) => d[c]), ctx.usuario.id);
+    const n = inserir(ctx.body, { usuarioId: ctx.usuario.id });
     ctx.status = 201;
-    return buscar(r.lastInsertRowid);
+    return n;
   });
 
   router.put('/api/notas/:id', ({ params, body }) => {
@@ -164,37 +222,9 @@ function registrar(router, db, opcoes = {}) {
     db.prepare('DELETE FROM notas_fiscais WHERE id = ?').run(params.id);
   });
 
-  // Emissão automática pela Focus NFe.
-  router.post('/api/notas/:id/emitir', async ({ params }) => {
-    const n = buscar(params.id);
-    if (!EDITAVEIS.includes(n.status)) throw erro(409, 'Esta nota já foi enviada');
-    if (n.pendencias.length) throw erro(400, `Complete os dados antes de emitir: ${n.pendencias.join('; ')}`);
-    const empresa = lerEmpresa(db);
-    if (empresa.nfse_provedor !== 'focusnfe' || !empresa.nfse_token) {
-      throw erro(400, 'Emissão automática não configurada. Configure a Focus NFe em Configurações ou use "Registrar nota emitida" após emitir no portal da prefeitura.');
-    }
-    // Cada envio usa uma referência nova para não colidir com uma tentativa anterior que deu erro.
-    const referencia = `nf-${n.id}-${Date.now()}`;
-    atualizar(n.id, { referencia, provedor: 'focusnfe', status: 'processando', mensagem: 'Enviando…' });
-    let resultado;
-    try {
-      const api = focus.cliente(empresa, fetchNfse);
-      resultado = await api.emitir(referencia, focus.montarPayload({ nota: n, empresa, cliente: buscarCliente(n.cliente_id) }));
-    } catch (e) {
-      resultado = { status: 'erro', mensagem: e.message };
-    }
-    atualizar(n.id, resultado);
-    return buscar(n.id);
-  });
-
-  router.post('/api/notas/:id/consultar', async ({ params }) => {
-    const n = buscar(params.id);
-    if (n.provedor !== 'focusnfe') throw erro(409, 'Nota registrada manualmente; não há o que consultar');
-    const empresa = lerEmpresa(db);
-    const resultado = await focus.cliente(empresa, fetchNfse).consultar(n.referencia).catch((e) => { throw erro(502, e.message); });
-    atualizar(n.id, resultado);
-    return buscar(n.id);
-  });
+  // Emissão pela Focus NFe.
+  router.post('/api/notas/:id/emitir', ({ params }) => emitir(params.id));
+  router.post('/api/notas/:id/consultar', ({ params }) => consultar(params.id));
 
   // Emissão manual: a nota foi emitida no portal da prefeitura e aqui só registramos os dados.
   router.post('/api/notas/:id/registrar', ({ params, body }) => {
@@ -239,7 +269,7 @@ function registrar(router, db, opcoes = {}) {
     const justificativa = v.texto(body.justificativa, 'justificativa', { obrigatorio: true, max: 255 });
     if (justificativa.length < 15) throw erro(400, 'A justificativa deve ter pelo menos 15 caracteres');
     if (n.provedor === 'focusnfe') {
-      const resultado = await focus.cliente(lerEmpresa(db), fetchNfse).cancelar(n.referencia, justificativa).catch((e) => { throw erro(502, e.message); });
+      const resultado = await focus.cliente(lerEmpresa(db), fetchNfse).cancelar(n.referencia, justificativa, n.api || 'nfse').catch((e) => { throw erro(502, e.message); });
       if (resultado.status !== 'cancelada') throw erro(409, resultado.mensagem || 'A prefeitura não confirmou o cancelamento');
     }
     atualizar(n.id, { status: 'cancelada', mensagem: `Cancelada: ${justificativa}` });
@@ -247,4 +277,4 @@ function registrar(router, db, opcoes = {}) {
   });
 }
 
-module.exports = { registrar, pendencias };
+module.exports = { registrar, pendencias, criarServicoNotas, automaticaConfigurada };

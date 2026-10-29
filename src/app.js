@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Router, ErroHttp, lerCorpo, lerCookies, enviarJson } = require('./http');
 const auth = require('./auth');
+const { criarAutomacao } = require('./nfse/automacao');
 
 const PUBLICO = path.join(__dirname, '..', 'public');
 const TIPOS = {
@@ -48,9 +49,11 @@ function servirEstatico(req, res, caminho) {
 
 // opcoes.fetchNfse permite substituir a chamada HTTP à API de NFS-e (usado nos testes).
 function criarApp(db, { seguro = false, log = true, fetchNfse, confiarProxy = false } = {}) {
-  const router = criarRouter(db, { fetchNfse });
+  // Emissão automática de notas; o agendamento é ligado pelo server.js (app.automacao.iniciar()).
+  const automacao = criarAutomacao(db, { fetchNfse, log: log ? console.log : () => {} });
+  const router = criarRouter(db, { fetchNfse, automacao });
 
-  return async function app(req, res) {
+  async function app(req, res) {
     const url = new URL(req.url, 'http://localhost');
     const caminho = url.pathname;
 
@@ -111,7 +114,9 @@ function criarApp(db, { seguro = false, log = true, fetchNfse, confiarProxy = fa
       }
     }
     if (log) console.log(`${req.method} ${caminho} ${res.statusCode} ${Date.now() - inicio}ms`);
-  };
+  }
+  app.automacao = automacao;
+  return app;
 }
 
 module.exports = { criarApp };

@@ -223,6 +223,8 @@ CREATE INDEX IF NOT EXISTS idx_lanc_status ON lancamentos(tipo, status);
 const INDICES_POS_MIGRACAO = `
 CREATE INDEX IF NOT EXISTS idx_lanc_projeto ON lancamentos(projeto_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_projetos_token ON projetos(token_publico) WHERE token_publico IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notas_lancamento ON notas_fiscais(lancamento_id);
+CREATE INDEX IF NOT EXISTS idx_notas_status ON notas_fiscais(status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_lanc_competencia ON lancamentos(contrato_id, competencia) WHERE contrato_id IS NOT NULL;
 `;
 
@@ -240,6 +242,10 @@ const COLUNAS_EXTRAS = {
   },
   notas_fiscais: {
     arquivo_id: 'INTEGER REFERENCES arquivos(id)',
+    // 1 = criada pela emissão automática.
+    automatica: 'INTEGER NOT NULL DEFAULT 0',
+    // API usada na Focus NFe: 'nfse' (prefeitura) ou 'nfsen' (NFS-e Nacional).
+    api: 'TEXT',
   },
   // Dados exigidos pela NFS-e para o tomador do serviço.
   clientes: {
