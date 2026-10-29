@@ -31,11 +31,22 @@ PRIMEIRO=$(ERP_DB="$DB" roda_node "
   const u = abrir(process.env.ERP_DB).prepare(\"SELECT email FROM usuarios ORDER BY papel = 'admin' DESC, id LIMIT 1\").get();
   process.stdout.write(u ? u.email : '');")
 
-printf '\nE-mail que vai receber a senha nova [%s]: ' "$PRIMEIRO"
-read -r EMAIL </dev/tty || true
-EMAIL=${EMAIL:-$PRIMEIRO}
+# Sem Terminal interativo (ex.: rodado por um assistente) ou com --temporaria:
+# cria uma senha temporária e mostra na tela, para trocar depois em Configurações → Minha conta.
+TEMPORARIA=0
+if [ "${1:-}" = "--temporaria" ] || ! { : </dev/tty; } 2>/dev/null; then TEMPORARIA=1; fi
 
-while true; do
+if [ "$TEMPORARIA" = 1 ]; then
+  EMAIL=$PRIMEIRO
+  SENHA="erp-$(roda_node "process.stdout.write(require('crypto').randomBytes(6).toString('hex'))")"
+  SENHA2=$SENHA
+else
+  printf '\nE-mail que vai receber a senha nova [%s]: ' "$PRIMEIRO"
+  read -r EMAIL </dev/tty || true
+  EMAIL=${EMAIL:-$PRIMEIRO}
+fi
+
+while [ "$TEMPORARIA" = 0 ]; do
   printf 'Nova senha (mínimo 8 caracteres; ela não aparece enquanto você digita): '
   read -rs SENHA </dev/tty; echo
   printf 'Repita a nova senha: '
@@ -54,11 +65,17 @@ ERP_DB="$DB" ERP_EMAIL="$EMAIL" ERP_SENHA="$SENHA" roda_node "
   db.prepare('UPDATE usuarios SET senha_hash = ?, ativo = 1 WHERE id = ?').run(hashSenha(process.env.ERP_SENHA), u.id);
   db.prepare('DELETE FROM sessoes WHERE usuario_id = ?').run(u.id);
   db.close();" || falha "Não foi possível trocar a senha."
+[ "$TEMPORARIA" = 1 ] && TEMP_MOSTRAR=$SENHA
 unset SENHA SENHA2
 
 # Reinicia o ERP para liberar o bloqueio de "muitas tentativas de login".
 launchctl kickstart -k "gui/$(id -u)/com.maragogilab.erp" 2>/dev/null || true
 sleep 2
 
-printf '\n\033[1;32mPronto! Entre no ERP com o e-mail %s e a senha nova.\033[0m\n' "$EMAIL"
+if [ "$TEMPORARIA" = 1 ]; then
+  printf '\n\033[1;32mPronto! Entre no ERP com:\n  E-mail: %s\n  Senha temporária: %s\033[0m\n' "$EMAIL" "$TEMP_MOSTRAR"
+  printf 'Depois de entrar, troque a senha em Configurações → Minha conta.\n'
+else
+  printf '\n\033[1;32mPronto! Entre no ERP com o e-mail %s e a senha nova.\033[0m\n' "$EMAIL"
+fi
 [ -x "$PASTA/app/mac/abrir.sh" ] && /bin/bash "$PASTA/app/mac/abrir.sh" || true
