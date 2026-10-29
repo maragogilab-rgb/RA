@@ -24,6 +24,15 @@ enviar as notas fiscais (Focus NFe) e buscar endereços pelo CEP. Não tem mensa
 - O sistema fica ligado em segundo plano enquanto o Mac estiver ligado. Assim as **notas automáticas**
   continuam saindo mesmo com a janela fechada. Com o Mac desligado, elas saem quando você ligá-lo de novo.
 
+## Esqueci a senha
+
+Abra o Terminal, cole a linha abaixo e aperte **Enter**. Ela mostra os e-mails cadastrados e pede uma senha nova.
+Nenhum dado é apagado.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maragogilab-rgb/RA/HEAD/mac/redefinir-senha.sh | bash
+```
+
 ## Atualizar para a versão mais nova
 
 Rode de novo a mesma linha do passo 2. Os seus dados são mantidos.
