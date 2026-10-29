@@ -423,3 +423,10 @@ test('servidor de arquivos não permite sair da pasta pública', async () => {
   const r = await fetch(`${base}/..%2f..%2fpackage.json`);
   assert.notEqual((await r.text()).includes('"name": "erp-empresa"'), true);
 });
+
+test('login no próprio computador não bloqueia por tentativas erradas', async () => {
+  for (let i = 0; i < 12; i++) {
+    assert.equal((await api('POST', '/api/login', { email: 'admin@teste.com', senha: 'errada' }, { semCookie: true })).status, 401);
+  }
+  assert.equal((await api('POST', '/api/login', { email: 'admin@teste.com', senha: 'senha-forte-1' })).status, 200);
+});
