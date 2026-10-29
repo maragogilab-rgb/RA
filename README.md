@@ -26,7 +26,13 @@ Funciona no computador e no celular, com tema claro e escuro.
 
 ## Como usar
 
-**Na internet (recomendado, para você e seu sócio):** siga o passo a passo em [COLOCAR-NO-AR.md](COLOCAR-NO-AR.md).
+**No seu Mac, com um ícone na mesa (sem hospedagem):** siga [INSTALAR-NO-MAC.md](INSTALAR-NO-MAC.md). É uma linha no Terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maragogilab-rgb/RA/HEAD/mac/instalar.sh | bash
+```
+
+**Na internet (para você e seu sócio acessarem de qualquer lugar):** siga o passo a passo em [COLOCAR-NO-AR.md](COLOCAR-NO-AR.md).
 
 **No próprio computador:**
 
