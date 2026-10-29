@@ -1,5 +1,5 @@
 import {
-  trocar, GET, POST, PUT, h, s, R$, num, dataBR, hoje, mesBR, selo, modal, formulario, tabela, cabecalho, btn, aviso, estado, ROTULOS,
+  trocar, GET, POST, PUT, DEL, h, s, R$, num, dataBR, hoje, mesBR, selo, modal, confirmar, formulario, tabela, cabecalho, btn, aviso, estado, ROTULOS,
 } from './nucleo.js';
 import { kpi } from './financeiro.js';
 
@@ -284,15 +284,17 @@ export async function configuracoes(raiz) {
     { nome: 'pix_titular', rotulo: 'Titular' },
     { nome: 'dados_bancarios', rotulo: 'Dados bancários', largura: 'cheio', placeholder: 'Ex.: Banco do Brasil Ag. 0000-0 Conta 00000-0' },
     { nome: 'teto_mei', rotulo: 'Teto anual do MEI (R$)', tipo: 'number', ajuda: 'Usado no painel quando o regime é MEI' },
-    { tipo: 'titulo', rotulo: 'Emissão automática (opcional)' },
-    { nome: 'nfse_provedor', rotulo: 'Forma de emissão', tipo: 'select',
-      opcoes: [['manual', 'Manual — emito no portal da prefeitura'], ['focusnfe', 'Automática — Focus NFe']] },
-    { nome: 'nfse_ambiente', rotulo: 'Ambiente', tipo: 'select', opcoes: [['homologacao', 'Homologação (teste)'], ['producao', 'Produção (validade fiscal)']] },
+    { tipo: 'titulo', rotulo: 'Emissão da nota fiscal' },
+    { nome: 'nfse_provedor', rotulo: 'Forma de emissão', tipo: 'select', largura: 'cheio',
+      opcoes: [['manual', 'Manual — eu emito no portal e registro aqui'], ['nacional', 'Automática — direto no gov.br (NFS-e Nacional, sem mensalidade)'],
+        ['focusnfe', 'Automática — pela Focus NFe (serviço pago)']] },
+    { nome: 'nfse_ambiente', rotulo: 'Ambiente', tipo: 'select',
+      opcoes: [['homologacao', 'Teste (notas sem valor fiscal)'], ['producao', 'Produção (notas de verdade)']] },
     { nome: 'nfse_token', rotulo: 'Token da API Focus NFe', tipo: 'password', largura: 'cheio', autocomplete: 'off',
       placeholder: estado.empresa?.nfse_token_configurado ? '•••••••• (configurado — deixe vazio para manter)' : 'Cole aqui o token da Focus NFe' },
     { nome: 'nfse_padrao', rotulo: 'Padrão da nota', tipo: 'select', largura: 'cheio',
       opcoes: [['', 'Automático (MEI usa a NFS-e Nacional; os demais, a prefeitura)'], ['municipal', 'Sistema da prefeitura'], ['nacional', 'NFS-e Nacional (gov.br)']] },
-    { tipo: 'titulo', rotulo: 'Piloto automático', ajuda: '— o sistema emite as notas sozinho (exige a Focus NFe acima)' },
+    { tipo: 'titulo', rotulo: 'Piloto automático', ajuda: '— o sistema emite as notas sozinho (exige a emissão automática acima)' },
     { nome: 'nfse_auto', rotulo: 'Emitir a nota automaticamente', tipo: 'select', largura: 'cheio',
       opcoes: [['desligado', 'Não — eu emito cada nota'], ['recebimento', 'Quando o pagamento for recebido (baixa no financeiro)'],
         ['vencimento', 'No vencimento da cobrança (para enviar junto com a cobrança)']] },
@@ -325,9 +327,53 @@ export async function configuracoes(raiz) {
       btn('Remover', () => { logo = ''; previa.hidden = true; inLogo.value = ''; }, 'btn-pequeno btn-fantasma')));
   formEmpresa.el.prepend(campoLogo);
   if (!admin) Object.values(formEmpresa.els).forEach((el) => { el.disabled = true; });
+
+  // Campos da Focus NFe só aparecem quando ela é a forma de emissão escolhida.
+  const mostrarCamposFocus = () => {
+    const focus = formEmpresa.els.nfse_provedor.value === 'focusnfe';
+    for (const c of ['nfse_token', 'nfse_padrao']) formEmpresa.els[c].closest('.campo').hidden = !focus;
+  };
+  formEmpresa.els.nfse_provedor.addEventListener('change', mostrarCamposFocus);
+  mostrarCamposFocus();
+
+  // Certificado digital A1: necessário para emitir direto no gov.br.
+  const areaCert = h('div');
+  const mostrarCert = () => {
+    const c = estado.empresa?.nfse_cert_info;
+    const status = !c ? h('p', { class: 'mudo' }, 'Nenhum certificado enviado.')
+      : c.erro ? h('div', { class: 'faixa faixa-alerta' }, `Problema no certificado guardado: ${c.erro}. Envie de novo.`)
+      : h('div', { class: c.dias_restantes < 0 ? 'faixa faixa-alerta' : c.dias_restantes <= 30 ? 'faixa faixa-info' : 'faixa faixa-ok' },
+        h('strong', {}, c.titular || 'Certificado'), c.cnpj ? ` · CNPJ ${c.cnpj}` : '',
+        ` · válido até ${new Date(c.valido_ate).toLocaleDateString('pt-BR')}`,
+        c.dias_restantes < 0 ? ' (VENCIDO)' : c.dias_restantes <= 30 ? ` (faltam ${c.dias_restantes} dias)` : '');
+    const inArq = h('input', { type: 'file', accept: '.pfx,.p12,application/x-pkcs12', id: 'cert-arquivo' });
+    const inSenha = h('input', { type: 'password', id: 'cert-senha', autocomplete: 'off', placeholder: 'Senha do certificado' });
+    trocar(areaCert, status, admin ? h('div', { class: 'form-grade' },
+      h('div', { class: 'campo' }, h('label', { for: 'cert-arquivo' }, 'Arquivo do certificado (.pfx ou .p12)'), inArq),
+      h('div', { class: 'campo' }, h('label', { for: 'cert-senha' }, 'Senha do certificado'), inSenha)) : null,
+    admin ? h('div', { class: 'linha-logo' },
+      btn(c ? 'Trocar certificado' : 'Enviar certificado', async () => {
+        const f = inArq.files[0];
+        if (!f) { aviso('Escolha o arquivo do certificado', 'erro'); return; }
+        try {
+          const arquivo = await new Promise((ok, falha) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = falha; r.readAsDataURL(f); });
+          estado.empresa = await POST('/empresa/certificado', { arquivo, senha: inSenha.value });
+          aviso('Certificado guardado');
+          mostrarCert();
+        } catch (e) { aviso(e.message, 'erro'); }
+      }, 'btn-primario'),
+      c ? btn('Remover', async () => {
+        if (!await confirmar('Remover o certificado? As notas automáticas param até você enviar outro.', 'Remover', 'btn-perigo')) return;
+        estado.empresa = await DEL('/empresa/certificado');
+        mostrarCert();
+      }, 'btn-fantasma') : null) : null);
+  };
+  mostrarCert();
   secoes.push(h('section', { class: 'cartao' }, h('h2', { class: 'secao' }, 'Dados da empresa e nota fiscal'),
     h('p', { class: 'mudo' }, 'Os campos marcados com NF são exigidos pela prefeitura para emitir a NFS-e. Confirme os códigos fiscais com seu contador.'),
     formEmpresa.el,
+    h('h3', { class: 'form-titulo' }, 'Certificado digital A1', h('small', { class: 'mudo' }, ' — para emitir direto no gov.br. Ele fica guardado só neste computador.')),
+    areaCert,
     admin ? btn('Salvar dados da empresa', async () => {
       try {
         estado.empresa = await PUT('/empresa', { ...formEmpresa.ler(), logo });

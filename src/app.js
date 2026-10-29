@@ -48,10 +48,11 @@ function servirEstatico(req, res, caminho) {
 }
 
 // opcoes.fetchNfse permite substituir a chamada HTTP à API de NFS-e (usado nos testes).
-function criarApp(db, { seguro = false, log = true, fetchNfse, confiarProxy = false } = {}) {
+// opcoes.requisitarNacional substitui a conexão com a NFS-e Nacional (usado nos testes).
+function criarApp(db, { seguro = false, log = true, fetchNfse, requisitarNacional, confiarProxy = false } = {}) {
   // Emissão automática de notas; o agendamento é ligado pelo server.js (app.automacao.iniciar()).
-  const automacao = criarAutomacao(db, { fetchNfse, log: log ? console.log : () => {} });
-  const router = criarRouter(db, { fetchNfse, automacao });
+  const automacao = criarAutomacao(db, { fetchNfse, requisitarNacional, log: log ? console.log : () => {} });
+  const router = criarRouter(db, { fetchNfse, requisitarNacional, automacao });
 
   async function app(req, res) {
     const url = new URL(req.url, 'http://localhost');

@@ -97,12 +97,16 @@ export async function lista(raiz) {
   }
 
   const cfg = estado.empresa || {};
-  const modo = cfg.regime_tributario === 'mei' && cfg.nfse_provedor !== 'focusnfe'
+  const teste = cfg.nfse_ambiente === 'producao' ? 'PRODUÇÃO' : 'TESTE — notas sem valor fiscal';
+  const modo = cfg.nfse_automatica && cfg.nfse_provedor === 'nacional'
+    ? h('div', { class: cfg.nfse_ambiente === 'producao' ? 'faixa faixa-ok' : 'faixa faixa-info' }, `Emissão automática direto no gov.br (NFS-e Nacional — ${teste}).`)
+    : cfg.regime_tributario === 'mei' && !cfg.nfse_automatica
     ? h('div', { class: 'faixa faixa-info' }, 'MEI: emita a NFS-e no Emissor Nacional (',
       h('a', { href: 'https://www.nfse.gov.br/EmissorNacional', target: '_blank', rel: 'noopener' }, 'nfse.gov.br/EmissorNacional'),
-      '). Aqui o sistema prepara os dados — use "Copiar dados" — e depois você registra o número da nota. Como MEI, o ISS já é pago no DAS: não é preciso informar alíquota.')
-    : cfg.nfse_provedor === 'focusnfe' && cfg.nfse_token_configurado
-    ? h('div', { class: 'faixa faixa-ok' }, `Emissão automática ativa (Focus NFe — ${cfg.nfse_ambiente === 'producao' ? 'PRODUÇÃO' : 'homologação/teste'}).`)
+      '). Aqui o sistema prepara os dados — use "Copiar dados" — e depois você registra o número da nota. Como MEI, o ISS já é pago no DAS: não é preciso informar alíquota. ',
+      estado.usuario.papel === 'admin' ? h('a', { href: '#/configuracoes' }, 'Emitir automaticamente (enviar o certificado digital) →') : null)
+    : cfg.nfse_automatica
+    ? h('div', { class: 'faixa faixa-ok' }, `Emissão automática ativa (Focus NFe — ${teste}).`)
     : h('div', { class: 'faixa faixa-info' }, 'Modo manual: o sistema prepara os dados da nota, você emite no portal da prefeitura e registra o número aqui. ',
       estado.usuario.papel === 'admin' ? h('a', { href: '#/configuracoes' }, 'Configurar emissão automática →') : null);
 
@@ -146,7 +150,7 @@ export async function lista(raiz) {
 export async function detalhe(raiz, { id }) {
   const n = await GET(`/notas/${id}`);
   const cfg = estado.empresa || {};
-  const automatico = cfg.nfse_provedor === 'focusnfe' && cfg.nfse_token_configurado;
+  const automatico = Boolean(cfg.nfse_automatica);
   const executar = (fn) => async () => { try { await fn(); estado.recarregar(); } catch (e) { aviso(e.message, 'erro'); estado.recarregar(); } };
   const editavel = ['rascunho', 'erro'].includes(n.status);
 
@@ -172,7 +176,8 @@ export async function detalhe(raiz, { id }) {
   const cancelar = () => {
     const form = formulario([{ nome: 'justificativa', rotulo: 'Motivo do cancelamento (mín. 15 caracteres)', tipo: 'textarea', obrigatorio: true, largura: 'cheio' }]);
     modal('Cancelar nota fiscal', h('div', {},
-      h('p', {}, n.provedor === 'focusnfe' ? 'O cancelamento será enviado à prefeitura.' : 'Cancele a nota também no portal da prefeitura; aqui ela ficará marcada como cancelada.'),
+      h('p', {}, n.provedor === 'nacional' ? 'O cancelamento será enviado ao sistema da NFS-e Nacional (gov.br).'
+        : n.provedor === 'focusnfe' ? 'O cancelamento será enviado à prefeitura.' : 'Cancele a nota também no portal; aqui ela ficará marcada como cancelada.'),
       form.el), {
       acoes: [
         { texto: 'Voltar', acao: () => {} },
@@ -246,16 +251,17 @@ export async function detalhe(raiz, { id }) {
     acoes.push(btn('Registrar nota emitida', registrar, automatico ? '' : 'btn-primario'));
     if (automatico) {
       acoes.push(btn('Emitir NFS-e', executar(async () => {
-        if (!await confirmar(`Emitir a nota de ${R$(n.valor_servicos)} para ${n.cliente_nome}${cfg.nfse_ambiente === 'producao' ? ' em PRODUÇÃO (nota com validade fiscal)' : ' em homologação (teste)'}?`, 'Emitir')) return;
+        if (!await confirmar(`Emitir a nota de ${R$(n.valor_servicos)} para ${n.cliente_nome}${cfg.nfse_ambiente === 'producao' ? ' em PRODUÇÃO (nota com validade fiscal)' : ' em TESTE (sem valor fiscal)'}?`, 'Emitir')) return;
         const r = await POST(`/notas/${id}/emitir`);
-        aviso(r.status === 'emitida' ? 'Nota emitida!' : r.status === 'erro' ? 'A prefeitura recusou a nota; veja o motivo.' : 'Nota enviada; aguardando a prefeitura.', r.status === 'erro' ? 'erro' : 'ok');
+        aviso(r.status === 'emitida' ? 'Nota emitida!' : r.status === 'erro' ? 'A nota foi recusada; veja o motivo.' : 'Nota enviada; aguardando a resposta.', r.status === 'erro' ? 'erro' : 'ok');
       }), 'btn-primario'));
     }
   }
   if (n.status === 'processando') acoes.push(btn('Atualizar situação', executar(() => POST(`/notas/${id}/consultar`)), 'btn-primario'));
   if (n.status === 'emitida') {
     if (n.arquivo_id) acoes.push(h('a', { class: 'btn', href: `/api/notas/${id}/arquivo`, target: '_blank', rel: 'noopener' }, 'Abrir PDF'));
-    else if (n.url_pdf) acoes.push(h('a', { class: 'btn', href: n.url_pdf, target: '_blank', rel: 'noopener' }, 'Abrir PDF'));
+    else if (n.url_pdf) acoes.push(h('a', { class: 'btn', href: n.url_pdf, target: '_blank', rel: 'noopener' }, n.provedor === 'nacional' ? 'Ver no gov.br' : 'Abrir PDF'));
+    if (n.tem_xml) acoes.push(h('a', { class: 'btn', href: `/api/notas/${id}/xml`, download: '' }, 'Baixar XML'));
     acoes.push(btn(n.arquivo_id ? 'Trocar PDF' : 'Anexar PDF', anexar, n.arquivo_id ? 'btn-fantasma' : 'btn-primario'));
     acoes.push(btn('Enviar por e-mail', enviarEmail));
     acoes.push(btn('WhatsApp', enviarWhats));
@@ -280,10 +286,12 @@ export async function detalhe(raiz, { id }) {
       n.codigo_tributario_municipio ? info('Cód. tributação municipal', n.codigo_tributario_municipio) : null,
       n.cnae ? info('CNAE', n.cnae) : null,
       n.numero ? info('Número', n.numero) : null,
-      n.codigo_verificacao ? info('Código de verificação', n.codigo_verificacao) : null,
+      n.codigo_verificacao && n.provedor !== 'nacional' ? info('Código de verificação', n.codigo_verificacao) : null,
       n.data_emissao ? info('Emissão', dataBR(n.data_emissao)) : null,
       n.projeto_id ? info('Projeto', h('a', { href: `#/projetos/${n.projeto_id}` }, `#${n.projeto_id} ${n.projeto_titulo || ''}`)) : null,
-      info('Emissão via', n.provedor === 'focusnfe' ? `Focus NFe — ${n.api === 'nfsen' ? 'NFS-e Nacional' : 'prefeitura'}` : 'Portal / Emissor Nacional (manual)'),
+      info('Emissão via', n.provedor === 'nacional' ? 'Direto no gov.br (NFS-e Nacional)'
+        : n.provedor === 'focusnfe' ? `Focus NFe — ${n.api === 'nfsen' ? 'NFS-e Nacional' : 'prefeitura'}` : 'Portal / Emissor Nacional (manual)'),
+      n.provedor === 'nacional' && n.codigo_verificacao ? info('Chave de acesso', h('span', { class: 'texto-curto' }, n.codigo_verificacao)) : null,
       n.automatica ? info('Origem', 'Criada pelo piloto automático') : null,
       n.arquivo_nome ? info('PDF anexado', h('a', { href: `/api/notas/${id}/arquivo`, target: '_blank', rel: 'noopener' }, n.arquivo_nome)) : null),
       h('div', { class: 'escopo' }, h('h3', {}, 'Discriminação'), h('p', {}, n.discriminacao)),
