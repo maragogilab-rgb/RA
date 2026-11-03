@@ -195,6 +195,8 @@ export async function editor(raiz, { id } = {}) {
   // Legenda própria por rede (opcional).
   const legendasRede = {};
   const areaLegendas = h('div', { class: 'legendas-rede' });
+  const autoIg = h('input', { type: 'checkbox', checked: Boolean(p.publicar_auto) });
+  const areaInstagram = h('div', { class: 'ig-auto' });
   const areaRedes = h('div', { class: 'redes-escolha', role: 'group', 'aria-label': 'Redes' });
   const areaPrevia = h('div', { class: 'previa-area' });
   const abasPrevia = h('div', { class: 'previa-abas', role: 'tablist' });
@@ -213,9 +215,38 @@ export async function editor(raiz, { id } = {}) {
         desenharRedes();
         desenharLegendas();
         desenharMetricas();
+        desenharInstagram();
         atualizarPrevia();
       },
     }, seloRede(k), r.nome)));
+  }
+
+  function desenharInstagram() {
+    if (!redes.includes('instagram')) { areaInstagram.hidden = true; return; }
+    areaInstagram.hidden = false;
+    if (p.ig_media_id) {
+      trocar(areaInstagram, h('p', { class: 'ig-ok' }, '✓ Publicado no Instagram pelo ERP. ',
+        p.link ? h('a', { href: p.link, target: '_blank', rel: 'noopener' }, 'Ver no Instagram') : null));
+      return;
+    }
+    trocar(areaInstagram,
+      h('label', { class: 'campo-check ig-check' }, autoIg, h('span', {}, h('strong', {}, 'Publicar sozinho no Instagram'),
+        h('small', { class: 'mudo' }, ' na data e horário marcados, quando o post estiver em "Agendado"'))),
+      p.publicacao_erro ? h('p', { class: 'txt-alerta nota' }, `Última tentativa falhou: ${p.publicacao_erro}`) : null,
+      p.id && p.instagram_impedimento ? h('p', { class: 'mudo nota' }, `⚠ ${p.instagram_impedimento}`)
+        : !p.id ? h('p', { class: 'mudo nota' }, 'Funciona para post com imagem (JPG) e com o perfil do cliente conectado em Resultados.') : null,
+      p.id && !p.instagram_impedimento ? h('button', {
+        type: 'button', class: 'btn btn-pequeno',
+        onclick: async (ev) => {
+          if (!await confirmar('Publicar este post no Instagram agora? (salve antes se mudou algo)', 'Publicar agora')) return;
+          ev.target.disabled = true;
+          try {
+            await POST(`/posts/${p.id}/publicar`);
+            aviso('Publicado no Instagram!');
+            estado.recarregar();
+          } catch (e) { aviso(e.message, 'erro'); ev.target.disabled = false; }
+        },
+      }, 'Publicar agora no Instagram') : null);
   }
 
   function desenharLegendas() {
@@ -291,7 +322,7 @@ export async function editor(raiz, { id } = {}) {
   }, 'Remover imagem');
 
   async function salvar() {
-    const d = { ...form.ler(), ...extras.ler(), redes, legendas_rede: Object.fromEntries(redes.map((r) => [r, legendasRede[r]?.value || ''])) };
+    const d = { ...form.ler(), ...extras.ler(), redes, publicar_auto: autoIg.checked && redes.includes('instagram'), legendas_rede: Object.fromEntries(redes.map((r) => [r, legendasRede[r]?.value || ''])) };
     if (d.status === 'agendado' && !d.data) throw new Error('Para agendar, escolha a data de publicação');
     const r = p.id ? await PUT(`/posts/${p.id}`, d) : await POST('/posts', d);
     if (imagemNova) await PUT(`/posts/${r.id}/imagem`, { arquivo: imagemNova, nome: 'capa.jpg' });
@@ -321,6 +352,7 @@ export async function editor(raiz, { id } = {}) {
   desenharRedes();
   desenharLegendas();
   desenharMetricas();
+  desenharInstagram();
 
   trocar(raiz,
     cabecalho(p.id ? p.titulo : 'Nova demanda',
@@ -345,6 +377,7 @@ export async function editor(raiz, { id } = {}) {
         h('section', { class: 'cartao' },
           h('h2', { class: 'secao' }, 'Onde publicar'),
           areaRedes,
+          areaInstagram,
           areaLegendas),
         areaMetricas,
         h('section', { class: 'cartao' }, extras.el),
@@ -489,6 +522,35 @@ function graficoLinha(serie, chave, rotulo) {
   return wrap;
 }
 
+const LOCAL = /localhost|127\.0\.0\.1|\.local$|^192\.168\.|^10\./;
+
+function abrirConexao(perfil, aoSalvar) {
+  const token = h('textarea', { rows: 3, placeholder: 'Cole aqui o token de acesso (começa com IG…)', autocomplete: 'off', spellcheck: 'false' });
+  const local = LOCAL.test(location.hostname);
+  modal('Conectar Instagram', h('div', { class: 'ig-passos' },
+    h('p', {}, 'Ligue o perfil uma vez e o ERP passa a puxar seguidores, alcance e o resultado de cada post sozinho, e a publicar os posts agendados.'),
+    h('ol', { class: 'passos' },
+      h('li', {}, 'No app do Instagram, deixe a conta como ', h('strong', {}, 'profissional'), ' (Criador de conteúdo ou Empresa).'),
+      h('li', {}, 'Abra ', h('a', { href: 'https://developers.facebook.com/apps/creation/', target: '_blank', rel: 'noopener' }, 'developers.facebook.com → Criar app'),
+        ', escolha o caso de uso de ', h('strong', {}, 'Instagram'), ' (gerenciar mensagens e conteúdo) e conclua.'),
+      h('li', {}, 'No painel do app: ', h('strong', {}, 'Instagram → Configuração da API com login do Instagram → Gerar tokens de acesso → Adicionar conta'),
+        '. Entre com o Instagram do perfil e autorize.'),
+      h('li', {}, 'Clique em ', h('strong', {}, 'Gerar token'), ', copie e cole abaixo.')),
+    token,
+    h('p', { class: 'mudo nota' }, 'Não precisa enviar o app para análise da Meta: para as suas próprias contas ele funciona em modo de desenvolvimento. O ERP renova o token sozinho (vale 60 dias).'),
+    local ? h('p', { class: 'txt-alerta nota' }, 'Você está usando o ERP no computador: os números vão ser puxados, mas a publicação automática só funciona com o ERP na internet (Railway).') : null), {
+    largo: true,
+    acoes: [
+      { texto: 'Cancelar', acao: () => {} },
+      { texto: 'Conectar', classe: 'btn-primario', acao: async () => {
+        const r = await POST(`/perfis/${perfil.id}/instagram`, { token: token.value, url_publica: location.origin });
+        aviso(r.sincronizacao?.erro ? `Conectado, mas a primeira leitura falhou: ${r.sincronizacao.erro}` : `Conectado como ${r.usuario}! Números e posts importados.`, r.sincronizacao?.erro ? 'erro' : 'ok');
+        aoSalvar?.();
+      } },
+    ],
+  });
+}
+
 async function abrirPerfil(perfil = {}, aoSalvar) {
   const clientes = await GET('/clientes?ativo=1');
   const form = formulario([
@@ -620,10 +682,27 @@ export async function resultados(raiz) {
     h('div', { class: 'perfil-topo' },
       seloRede(perfil.rede, { grande: true }),
       h('div', { class: 'cresce' }, h('h2', {}, `${REDES[perfil.rede].nome} ${perfil.usuario}`),
-        h('small', { class: 'mudo' }, perfil.atualizado_em ? `Atualizado em ${dataBR(perfil.atualizado_em)}` : 'Nenhum número lançado ainda')),
+        h('small', { class: 'mudo' }, perfil.conectado
+          ? `● Conectado ao Instagram${perfil.sincronizado_em ? ` · atualizado sozinho em ${dataBR(perfil.sincronizado_em)} ${perfil.sincronizado_em.slice(11, 16)} (UTC)` : ''}`
+          : perfil.atualizado_em ? `Atualizado em ${dataBR(perfil.atualizado_em)}` : 'Nenhum número lançado ainda')),
       h('div', { class: 'acoes' }, periodo,
         btn('Editar perfil', () => abrirPerfil(perfil, recarregar), 'btn-fantasma'),
-        btn('Lançar números', () => abrirNumeros(perfil, {}, recarregar), 'btn-primario'))),
+        perfil.rede === 'instagram' && perfil.conectado ? btn('Desconectar', async () => {
+          if (!await confirmar('Parar de puxar os números e de publicar neste perfil? O histórico continua salvo.', 'Desconectar', 'btn-perigo')) return;
+          await tentar(() => DEL(`/perfis/${perfil.id}/instagram`), 'Instagram desconectado');
+          recarregar();
+        }, 'btn-fantasma') : null,
+        perfil.rede === 'instagram' && perfil.conectado ? btn('Atualizar agora', async (ev) => {
+          ev.target.disabled = true;
+          try {
+            const r = await POST(`/perfis/${perfil.id}/sincronizar`);
+            aviso(`Atualizado: ${r.sincronizacao.posts} posts lidos${r.sincronizacao.novos ? `, ${r.sincronizacao.novos} novos` : ''}`);
+            recarregar();
+          } catch (e) { aviso(e.message, 'erro'); ev.target.disabled = false; }
+        }, 'btn-primario') : null,
+        perfil.rede === 'instagram' && !perfil.conectado ? btn('Conectar Instagram', () => abrirConexao(perfil, recarregar), 'btn-primario') : null,
+        btn('Lançar números', () => abrirNumeros(perfil, {}, recarregar), perfil.rede === 'instagram' ? '' : 'btn-primario')),
+      perfil.sync_erro ? h('p', { class: 'faixa faixa-alerta perfil-erro', role: 'alert' }, `Instagram: ${perfil.sync_erro}`) : null),
     kpis,
     h('section', { class: 'cartao' },
       h('div', { class: 'secao-topo' }, h('h2', { class: 'secao' }, 'Evolução'), seletorGrafico),

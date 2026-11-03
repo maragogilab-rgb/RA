@@ -282,6 +282,7 @@ CREATE INDEX IF NOT EXISTS idx_lanc_projeto ON lancamentos(projeto_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_projetos_token ON projetos(token_publico) WHERE token_publico IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_notas_lancamento ON notas_fiscais(lancamento_id);
 CREATE INDEX IF NOT EXISTS idx_notas_status ON notas_fiscais(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_ig ON posts(ig_media_id) WHERE ig_media_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_lanc_competencia ON lancamentos(contrato_id, competencia) WHERE contrato_id IS NOT NULL;
 `;
 
@@ -355,6 +356,21 @@ const COLUNAS_EXTRAS = {
   projeto_itens: {
     detalhe: 'TEXT',
     medida: 'TEXT',
+  },
+  // Integração com o Instagram.
+  posts: {
+    publicar_auto: 'INTEGER NOT NULL DEFAULT 0',
+    ig_media_id: 'TEXT',
+    publicacao_erro: 'TEXT',
+    publicacao_tentativas: 'INTEGER NOT NULL DEFAULT 0',
+    imagem_token: 'TEXT',
+  },
+  perfis_sociais: {
+    token: 'TEXT',
+    ig_user_id: 'TEXT',
+    token_renovado_em: 'TEXT',
+    sincronizado_em: 'TEXT',
+    sync_erro: 'TEXT',
   },
   // Enquadramento fiscal do serviço.
   servicos: {

@@ -44,8 +44,12 @@ if (process.env.ERP_NFSE_AUTO !== '0') {
   app.automacao.iniciar((Number(process.env.ERP_NFSE_INTERVALO) || 2) * 60 * 1000);
 }
 
+// Instagram: publica os posts agendados e atualiza os números a cada 5 minutos. ERP_INSTAGRAM_AUTO=0 desliga.
+if (process.env.ERP_INSTAGRAM_AUTO !== '0') app.instagram.iniciar();
+
 function encerrar() {
   app.automacao.parar();
+  app.instagram.parar();
   servidor.close(() => {
     db.close();
     process.exit(0);

@@ -515,3 +515,11 @@ td.acoes-linha { text-align: right; white-space: nowrap; }
 .kpis-rede { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 @media (min-width: 1200px) { .kpis-rede { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .kpis-rede { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpis-rede .kpi-valor { font-size: 18px; } }
+.ig-auto { margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; background: var(--superficie-2); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.ig-auto[hidden] { display: none; }
+.ig-auto .nota { margin: 0; }
+.ig-check { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.ig-check input { width: auto; margin-top: 3px; }
+.ig-ok { color: var(--bom); margin: 0; font-weight: 500; }
+.ig-passos textarea { font-family: ui-monospace, Menlo, monospace; font-size: 12px; margin-top: 8px; }
+.perfil-erro { flex-basis: 100%; margin: 0; padding: 8px 12px; border-radius: 8px; }

@@ -3,7 +3,9 @@
 // Conteúdo para redes sociais: quadro de demandas, agendamento e resultados.
 
 const { erro } = require('../http');
+const crypto = require('node:crypto');
 const v = require('../validar');
+const { ErroInstagram } = require('../instagram');
 
 const STATUS = ['ideia', 'producao', 'aprovacao', 'agendado', 'publicado'];
 const FORMATOS = ['post', 'carrossel', 'reels', 'story', 'video', 'texto'];
@@ -40,19 +42,33 @@ function lerLegendasRede(valor) {
 
 const interacoes = (m) => (m.curtidas || 0) + (m.comentarios || 0) + (m.compartilhamentos || 0) + (m.salvos || 0);
 
-function registrar(router, db) {
+// Erros do Instagram viram mensagens para a pessoa (400).
+async function viaInstagram(fn) {
+  try {
+    return await fn();
+  } catch (e) {
+    if (e instanceof ErroInstagram) throw erro(400, e.message);
+    throw e;
+  }
+}
+
+function registrar(router, db, { instagram } = {}) {
   const SELECT_POST = `SELECT p.id, p.titulo, p.cliente_id, p.formato, p.status, p.redes, p.legenda, p.legendas_rede, p.data, p.hora,
-      p.responsavel_id, p.arquivo_id, p.link, p.notas, p.ordem, p.criado_em,
+      p.responsavel_id, p.arquivo_id, p.link, p.notas, p.ordem, p.criado_em, p.publicar_auto, p.ig_media_id, p.publicacao_erro,
       c.nome AS cliente_nome, u.nome AS responsavel_nome
     FROM posts p LEFT JOIN clientes c ON c.id = p.cliente_id LEFT JOIN usuarios u ON u.id = p.responsavel_id`;
 
-  const montar = (p) => ({ ...p, redes: JSON.parse(p.redes || '[]'), legendas_rede: JSON.parse(p.legendas_rede || '{}'), tem_imagem: Boolean(p.arquivo_id) });
+  const montar = (p) => ({ ...p, redes: JSON.parse(p.redes || '[]'), legendas_rede: JSON.parse(p.legendas_rede || '{}'), tem_imagem: Boolean(p.arquivo_id), publicar_auto: Boolean(p.publicar_auto) });
 
   const buscarPost = (id) => {
     const p = db.prepare(`${SELECT_POST} WHERE p.id = ?`).get(id);
     if (!p) throw erro(404, 'Post não encontrado');
     const post = montar(p);
     post.metricas = db.prepare('SELECT * FROM post_metricas WHERE post_id = ? ORDER BY rede').all(id);
+    // Por que o post não pode ser publicado sozinho no Instagram (null = pode).
+    if (instagram && post.redes.includes('instagram') && !post.ig_media_id) {
+      post.instagram_impedimento = instagram.impedimento(db.prepare('SELECT * FROM posts WHERE id = ?').get(id));
+    }
     return post;
   };
 
@@ -70,11 +86,12 @@ function registrar(router, db) {
       responsavel_id: v.inteiro(b.responsavel_id, 'responsavel_id'),
       link: v.texto(b.link, 'link', { max: 500 }),
       notas: v.texto(b.notas, 'notas', { max: 2000 }),
+      publicar_auto: v.booleano(b.publicar_auto, false),
     };
     if (d.status === 'agendado' && !d.data) throw erro(400, 'Para agendar, informe a data de publicação');
     return d;
   };
-  const CAMPOS = ['titulo', 'cliente_id', 'formato', 'status', 'redes', 'legenda', 'legendas_rede', 'data', 'hora', 'responsavel_id', 'link', 'notas'];
+  const CAMPOS = ['titulo', 'cliente_id', 'formato', 'status', 'redes', 'legenda', 'legendas_rede', 'data', 'hora', 'responsavel_id', 'link', 'notas', 'publicar_auto'];
 
   // Novo card vai para o fim da coluna.
   const proximaOrdem = (status) => (db.prepare('SELECT MAX(ordem) AS m FROM posts WHERE status = ?').get(status).m ?? 0) + 1;
@@ -107,7 +124,8 @@ function registrar(router, db) {
     const atual = buscarPost(params.id);
     const d = lerPost(body);
     const ordem = d.status === atual.status ? atual.ordem : proximaOrdem(d.status);
-    db.prepare(`UPDATE posts SET ${CAMPOS.map((c) => `${c} = ?`).join(', ')}, ordem = ? WHERE id = ?`).run(...CAMPOS.map((c) => d[c]), ordem, params.id);
+    // Salvar de novo libera novas tentativas de publicação automática.
+    db.prepare(`UPDATE posts SET ${CAMPOS.map((c) => `${c} = ?`).join(', ')}, ordem = ?, publicacao_tentativas = 0, publicacao_erro = NULL WHERE id = ?`).run(...CAMPOS.map((c) => d[c]), ordem, params.id);
     return buscarPost(params.id);
   });
 
@@ -179,11 +197,13 @@ function registrar(router, db) {
 
   // ---------- Perfis nas redes ----------
   const buscarPerfil = (id) => {
-    const p = db.prepare(`SELECT p.*, c.nome AS cliente_nome,
+    const p = db.prepare(`SELECT p.id, p.cliente_id, p.rede, p.usuario, p.criado_em, p.sincronizado_em, p.sync_erro,
+        p.token IS NOT NULL AS conectado, c.nome AS cliente_nome,
         (SELECT seguidores FROM perfil_numeros n WHERE n.perfil_id = p.id AND n.seguidores IS NOT NULL ORDER BY n.data DESC LIMIT 1) AS seguidores,
         (SELECT MAX(data) FROM perfil_numeros n WHERE n.perfil_id = p.id) AS atualizado_em
       FROM perfis_sociais p LEFT JOIN clientes c ON c.id = p.cliente_id WHERE p.id = ?`).get(id);
     if (!p) throw erro(404, 'Perfil não encontrado');
+    p.conectado = Boolean(p.conectado);
     return p;
   };
   const lerPerfil = (b) => ({
@@ -209,6 +229,41 @@ function registrar(router, db) {
     buscarPerfil(params.id);
     db.prepare('DELETE FROM perfis_sociais WHERE id = ?').run(params.id);
   });
+
+  // ---------- Instagram (API oficial) ----------
+  router.post('/api/perfis/:id/instagram', ({ params, body }) => viaInstagram(async () => {
+    buscarPerfil(params.id);
+    const r = await instagram.conectar(params.id, body.token, { url: v.texto(body.url_publica, 'url_publica', { max: 300 }) });
+    let sincronizacao = null;
+    try { sincronizacao = await instagram.sincronizar(params.id); } catch (e) { sincronizacao = { erro: e.message }; }
+    return { ...buscarPerfil(params.id), conta: r, sincronizacao };
+  }));
+  router.delete('/api/perfis/:id/instagram', ({ params }) => {
+    buscarPerfil(params.id);
+    instagram.desconectar(params.id);
+    return buscarPerfil(params.id);
+  });
+  router.post('/api/perfis/:id/sincronizar', ({ params }) => viaInstagram(async () => {
+    buscarPerfil(params.id);
+    const r = await instagram.sincronizar(params.id, { dias: 7 });
+    return { ...buscarPerfil(params.id), sincronizacao: r };
+  }));
+  router.post('/api/posts/:id/publicar', ({ params }) => viaInstagram(async () => {
+    buscarPost(params.id);
+    await instagram.publicar(Number(params.id));
+    return buscarPost(params.id);
+  }));
+
+  // Imagem pública (com segredo no link) para o Instagram baixar na hora de publicar.
+  router.get('/api/publico/posts/:id/:arquivo', (ctx) => {
+    const segredo = String(ctx.params.arquivo).replace(/\.jpg$/, '');
+    const p = db.prepare('SELECT imagem_token, arquivo_id FROM posts WHERE id = ?').get(ctx.params.id);
+    const ok = p?.imagem_token && p.arquivo_id && segredo.length === p.imagem_token.length
+      && crypto.timingSafeEqual(Buffer.from(segredo), Buffer.from(p.imagem_token));
+    if (!ok) throw erro(404, 'Imagem não encontrada');
+    const a = db.prepare('SELECT tipo, conteudo FROM arquivos WHERE id = ?').get(p.arquivo_id);
+    ctx.bruto = { tipo: a.tipo, corpo: Buffer.from(a.conteudo) };
+  }, { publica: true });
 
   // Números do perfil numa data (um lançamento por dia; lançar de novo substitui).
   router.post('/api/perfis/:id/numeros', (ctx) => {
