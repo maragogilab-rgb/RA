@@ -357,6 +357,13 @@ function registrar(router, db) {
       lembretes.push({ tipo: 'tarefa', texto: `Tarefa ${t.prazo < hoje ? 'atrasada' : 'para hoje'}: ${t.titulo}`, link: '#/tarefas' });
     }
 
+    const postsHoje = db.prepare(`SELECT p.id, p.titulo, p.data, p.hora, c.nome AS cliente FROM posts p LEFT JOIN clientes c ON c.id = p.cliente_id
+      WHERE p.status <> 'publicado' AND p.data IS NOT NULL AND p.data <= ? ORDER BY p.data, p.hora LIMIT 10`).all(hoje);
+    for (const p of postsHoje) {
+      const quando = p.data < hoje ? `atrasado desde ${p.data.split('-').reverse().join('/')}` : `hoje${p.hora ? ` às ${p.hora}` : ''}`;
+      lembretes.push({ tipo: 'post', texto: `Post ${quando}: ${p.titulo}${p.cliente ? ` (${p.cliente})` : ''}`, link: `#/conteudo/${p.id}` });
+    }
+
     return {
       metas,
       reservas,

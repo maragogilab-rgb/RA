@@ -4,6 +4,7 @@ import * as proj from './projetos.js';
 import * as ctr from './contratos.js';
 import * as nf from './notas.js';
 import * as ag from './agenda.js';
+import * as ct from './conteudo.js';
 import * as fin from './financeiro.js';
 import * as sis from './sistema.js';
 
@@ -16,6 +17,11 @@ const ROTAS = [
   [/^contratos$/, ctr.contratos],
   [/^agenda$/, ag.agenda],
   [/^tarefas$/, ag.tarefas],
+  [/^conteudo$/, ct.quadro],
+  [/^conteudo\/calendario$/, ct.calendario],
+  [/^conteudo\/resultados$/, ct.resultados],
+  [/^conteudo\/novo$/, ct.editor],
+  [/^conteudo\/(?<id>\d+)$/, ct.editor],
   [/^notas$/, nf.lista],
   [/^notas\/(?<id>\d+)$/, nf.detalhe],
   [/^financeiro(?:\/(?<tipo>receber|pagar))?$/, fin.financeiro],
@@ -32,6 +38,7 @@ const MENU = [
   ['projetos', 'Orçamentos e projetos', '◈'],
   ['agenda', 'Agenda', '◷'],
   ['tarefas', 'Tarefas', '☑'],
+  ['conteudo', 'Conteúdo e redes', '✦'],
   ['contratos', 'Contratos (fee)', '↻'],
   ['notas', 'Notas fiscais', '▤'],
   ['financeiro', 'Financeiro', '◎'],

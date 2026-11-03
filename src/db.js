@@ -202,6 +202,63 @@ CREATE TABLE IF NOT EXISTS arquivos (
   criado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Conteúdo para redes sociais: cada post passa por ideia → produção → aprovação → agendado → publicado.
+CREATE TABLE IF NOT EXISTS posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  titulo TEXT NOT NULL,
+  cliente_id INTEGER REFERENCES clientes(id),
+  formato TEXT NOT NULL DEFAULT 'post',
+  status TEXT NOT NULL DEFAULT 'ideia' CHECK (status IN ('ideia', 'producao', 'aprovacao', 'agendado', 'publicado')),
+  redes TEXT NOT NULL DEFAULT '[]',
+  legenda TEXT,
+  legendas_rede TEXT NOT NULL DEFAULT '{}',
+  data TEXT,
+  hora TEXT,
+  responsavel_id INTEGER REFERENCES usuarios(id),
+  arquivo_id INTEGER REFERENCES arquivos(id),
+  link TEXT,
+  notas TEXT,
+  ordem REAL NOT NULL DEFAULT 0,
+  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Resultado de cada post publicado, por rede (preenchido à mão a partir do app da rede).
+CREATE TABLE IF NOT EXISTS post_metricas (
+  post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  rede TEXT NOT NULL,
+  alcance INTEGER NOT NULL DEFAULT 0,
+  visualizacoes INTEGER NOT NULL DEFAULT 0,
+  curtidas INTEGER NOT NULL DEFAULT 0,
+  comentarios INTEGER NOT NULL DEFAULT 0,
+  compartilhamentos INTEGER NOT NULL DEFAULT 0,
+  salvos INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (post_id, rede)
+);
+
+-- Perfis nas redes (da agência ou dos clientes) e a evolução dos números ao longo do tempo.
+CREATE TABLE IF NOT EXISTS perfis_sociais (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  cliente_id INTEGER REFERENCES clientes(id),
+  rede TEXT NOT NULL,
+  usuario TEXT NOT NULL,
+  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS perfil_numeros (
+  perfil_id INTEGER NOT NULL REFERENCES perfis_sociais(id) ON DELETE CASCADE,
+  data TEXT NOT NULL,
+  seguidores INTEGER,
+  alcance INTEGER,
+  visualizacoes INTEGER,
+  interacoes INTEGER,
+  visitas INTEGER,
+  cliques INTEGER,
+  PRIMARY KEY (perfil_id, data)
+);
+
+CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status, ordem);
+CREATE INDEX IF NOT EXISTS idx_posts_data ON posts(data);
+
 CREATE INDEX IF NOT EXISTS idx_eventos_data ON eventos(data);
 CREATE INDEX IF NOT EXISTS idx_tarefas_prazo ON tarefas(feito, prazo);
 

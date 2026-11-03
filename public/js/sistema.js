@@ -190,7 +190,7 @@ function primeirosPassos() {
 }
 
 function cartaoLembretes(lembretes) {
-  const icone = { orcamento: '⏳', pos_venda: '🤝', follow_up: '📞', das: '🧾', tarefa: '☑' };
+  const icone = { orcamento: '⏳', pos_venda: '🤝', follow_up: '📞', das: '🧾', tarefa: '☑', post: '📣' };
   return h('section', { class: 'cartao lembretes' },
     h('h2', { class: 'secao' }, `Lembretes (${lembretes.length})`),
     h('ul', { class: 'lista-simples' }, lembretes.map((l) => h('li', {},

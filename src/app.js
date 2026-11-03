@@ -25,7 +25,7 @@ const SEGURANCA = {
 
 function criarRouter(db, opcoes) {
   const router = new Router();
-  for (const m of ['sistema', 'cadastros', 'projetos', 'contratos', 'financeiro', 'notas', 'agenda']) {
+  for (const m of ['sistema', 'cadastros', 'projetos', 'contratos', 'financeiro', 'notas', 'agenda', 'conteudo']) {
     require(`./modulos/${m}`).registrar(router, db, opcoes);
   }
   return router;

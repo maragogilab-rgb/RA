@@ -8,7 +8,7 @@ const path = require('node:path');
 const { abrir } = require('../src/db');
 const { garantirAdmin } = require('../src/auth');
 const { criarApp } = require('../src/app');
-const { somarMeses, hoje } = require('../src/validar');
+const { somarMeses, somarDias, hoje } = require('../src/validar');
 
 const ARQUIVO_DB = process.env.ERP_DB || path.join(__dirname, '..', 'data', 'erp.db');
 const EMAIL = process.env.ERP_ADMIN_EMAIL || 'admin@empresa.com';
@@ -141,6 +141,35 @@ async function main() {
     await api('POST', `/notas/${nf.id}/registrar`, { numero: '2026000045', codigo_verificacao: 'A1B2C3D4', data_emissao: somarMeses(hoje(), -4) });
     const rec = (await api('GET', '/lancamentos?tipo=receber&busca=redes')).at(-1);
     await api('POST', '/notas', await api('GET', `/notas/sugestao?lancamento_id=${rec.id}`));
+
+    // Conteúdo para redes sociais: quadro da semana, perfis e resultados.
+    const dia = (n) => somarDias(hoje(), n);
+    const posts = [
+      { titulo: 'Carrossel: 5 erros ao gravar com celular', formato: 'carrossel', status: 'ideia', redes: ['instagram', 'linkedin'] },
+      { titulo: 'Bastidores da cobertura do casamento', formato: 'reels', status: 'producao', redes: ['instagram', 'tiktok'], data: dia(2), hora: '19:00', cli: 0 },
+      { titulo: 'Cardápio novo — fotos dos pratos', formato: 'carrossel', status: 'producao', redes: ['instagram', 'facebook'], data: dia(3), hora: '11:30', cli: 1 },
+      { titulo: 'Depoimento de cliente (vídeo)', formato: 'video', status: 'aprovacao', redes: ['instagram', 'youtube'], data: dia(1), hora: '18:00' },
+      { titulo: 'Promo de fim de semana', formato: 'post', status: 'agendado', redes: ['instagram', 'facebook'], data: dia(0), hora: '17:00', cli: 1 },
+      { titulo: 'Antes e depois da edição', formato: 'reels', status: 'agendado', redes: ['instagram', 'tiktok'], data: dia(4), hora: '20:00' },
+    ];
+    for (const p of posts) {
+      await api('POST', '/posts', { ...p, cliente_id: p.cli === undefined ? null : clientes[p.cli].id, legenda: `${p.titulo}.\n\nFale com a gente pelo link da bio. #maragogi #audiovisual` });
+    }
+    const publicados = ['Making of do clipe', 'Drone na praia de Antunes', 'Dica rápida: luz natural', 'Tour pelo estúdio', 'Reels com trend do momento'];
+    for (const [i, titulo] of publicados.entries()) {
+      const p = await api('POST', '/posts', { titulo, formato: i % 2 ? 'post' : 'reels', status: 'publicado', redes: ['instagram'], data: dia(-3 - i * 5) });
+      const alcance = 2000 + ((i * 7919) % 9000);
+      await api('PUT', `/posts/${p.id}/metricas`, { metricas: [{ rede: 'instagram', alcance, visualizacoes: alcance * 2, curtidas: Math.round(alcance / 12), comentarios: 10 + i * 7, compartilhamentos: 5 + i * 3, salvos: 8 + ((i * 13) % 40) }] });
+    }
+    const ig = await api('POST', '/perfis', { rede: 'instagram', usuario: '@maragogilab' });
+    await api('POST', '/perfis', { rede: 'tiktok', usuario: '@maragogilab' });
+    for (let s = 12; s >= 0; s--) {
+      const onda = Math.round(Math.sin(s / 2) * 800);
+      await api('POST', `/perfis/${ig.id}/numeros`, {
+        data: dia(-s * 7), seguidores: 8200 + (12 - s) * 140 + Math.round(onda / 4), alcance: 9000 + (12 - s) * 400 + onda,
+        visualizacoes: 30000 + (12 - s) * 1500 + onda * 3, interacoes: 900 + (12 - s) * 30, visitas: 400 + (12 - s) * 15, cliques: 40 + (12 - s) * 2,
+      });
+    }
 
     console.log(`Dados de demonstração criados em ${ARQUIVO_DB}`);
     console.log(`Acesse com ${EMAIL} / ${SENHA}`);
