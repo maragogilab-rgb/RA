@@ -19,6 +19,7 @@ ERP web para a Maragogi Lab (agência de marketing e audiovisual): propostas, jo
 - Validação de entrada sempre por `src/validar.js`; erros com `erro(status, msg)` de `src/http.js`.
 - Nunca leia nem apague `data/*.db` nem `.env` (bloqueado em `.claude/settings.json`).
 - Para criar um módulo novo, siga a skill `novo-modulo-erp`.
+- Telas e componentes seguem `DESIGN.md` (cores, tipografia, componentes e o que não fazer).
 
 ## Estrutura
 
