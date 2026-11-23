@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maragogi Lab — Marketing e Audiovisual</title>
+<meta name="description" content="Maragogi Lab: agência de marketing e produção audiovisual. Vídeos, fotografia, drone, redes sociais, tráfego pago e identidade visual.">
+<meta property="og:title" content="Maragogi Lab — Marketing e Audiovisual">
+<meta property="og:description" content="Vídeo, foto, drone, redes sociais e tráfego pago para marcas que querem ser vistas.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#111111">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --rosa: #FF2E93;
+    --ciano: #22D3EE;
+    --preto: #111111;
+    --branco: #FFFFFF;
+    --cinza: #F4F4F2;
+    --texto-2: #55544F;
+    --borda: #E4E3DE;
+    --max: 1160px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Manrope', system-ui, sans-serif; color: var(--preto); background: var(--branco); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration: none; }
+  img { max-width: 100%; display: block; }
+  .container { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
+  .rotulo { font-weight: 800; font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: var(--rosa); }
+  h1, h2, h3 { font-weight: 800; line-height: 1.05; letter-spacing: -0.02em; }
+  h2 { font-size: clamp(32px, 5vw, 56px); margin: 12px 0 20px; }
+  .rosa { color: var(--rosa); }
+  .botao { display: inline-flex; align-items: center; gap: 10px; padding: 16px 28px; border-radius: 999px; font-weight: 800; font-size: 16px; transition: transform .15s, background .15s; }
+  .botao:hover { transform: translateY(-2px); }
+  .botao-rosa { background: var(--rosa); color: var(--branco); }
+  .botao-rosa:hover { background: #e9207f; }
+  .botao-linha { border: 2px solid currentColor; }
+  section { padding: 110px 0; }
+
+  /* Topo */
+  header { position: fixed; inset: 0 0 auto 0; z-index: 50; transition: background .2s, box-shadow .2s; }
+  header.rolou { background: rgba(17,17,17,.94); backdrop-filter: blur(10px); }
+  .nav { display: flex; align-items: center; justify-content: space-between; height: 76px; color: var(--branco); }
+  .marca { font-weight: 800; font-size: 18px; letter-spacing: .14em; display: flex; align-items: center; gap: 10px; }
+  .marca i { width: 14px; height: 14px; border-radius: 50%; background: var(--ciano); display: inline-block; }
+  .links { display: flex; gap: 32px; font-weight: 700; font-size: 15px; align-items: center; }
+  .links a:not(.botao):hover { color: var(--ciano); }
+  .links .botao { padding: 11px 20px; font-size: 14px; }
+  .menu-btn { display: none; background: none; border: 0; color: var(--branco); font: inherit; font-weight: 800; cursor: pointer; padding: 8px; }
+
+  /* Hero */
+  .hero { background: var(--preto); color: var(--branco); min-height: 100vh; display: flex; align-items: center; position: relative; overflow: hidden; padding: 140px 0 100px; }
+  .hero::before { content: ""; position: absolute; width: 620px; height: 620px; border-radius: 50%; background: var(--ciano); top: 110px; right: -300px; opacity: .95; }
+  .hero::after { content: ""; position: absolute; width: 180px; height: 180px; border-radius: 50%; border: 3px solid var(--rosa); bottom: 80px; right: 12%; }
+  .hero .container { position: relative; z-index: 1; }
+  .hero h1 { font-size: clamp(46px, 9vw, 116px); margin: 18px 0 28px; max-width: 12ch; }
+  .hero p { font-size: clamp(18px, 2vw, 22px); color: #CFCEC8; max-width: 560px; margin-bottom: 40px; font-weight: 500; }
+  .hero .acoes { display: flex; gap: 14px; flex-wrap: wrap; }
+
+  /* Faixa */
+  .faixa { background: var(--rosa); color: var(--branco); overflow: hidden; padding: 18px 0; white-space: nowrap; }
+  .faixa div { display: inline-block; animation: correr 28s linear infinite; font-weight: 800; font-size: 22px; letter-spacing: .06em; }
+  .faixa span { margin: 0 28px; }
+  @keyframes correr { to { transform: translateX(-50%); } }
+
+  /* Serviços */
+  .intro { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: end; margin-bottom: 56px; }
+  .intro p { color: var(--texto-2); font-size: 18px; }
+  .grade { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .servico { border: 1px solid var(--borda); border-radius: 22px; padding: 30px 26px; background: var(--branco); transition: border-color .2s, transform .2s; display: flex; flex-direction: column; gap: 12px; }
+  .servico:hover { border-color: var(--preto); transform: translateY(-4px); }
+  .servico .num { font-weight: 800; font-size: 14px; color: var(--rosa); }
+  .servico h3 { font-size: 22px; }
+  .servico p { color: var(--texto-2); font-size: 15px; }
+  .servico .tag { margin-top: auto; font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #0e8ea3; }
+
+  /* Trabalhos */
+  .trabalhos { background: var(--cinza); }
+  .portfolio { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 260px; gap: 18px; }
+  .peca { border-radius: 22px; overflow: hidden; position: relative; background: var(--preto); color: var(--branco); display: flex; align-items: flex-end; padding: 24px; }
+  .peca.grande { grid-row: span 2; }
+  .peca.larga { grid-column: span 2; }
+  .peca img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform .4s; }
+  .peca:hover img { transform: scale(1.05); }
+  .peca::after { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent 40%, rgba(0,0,0,.7)); }
+  .peca .legenda { position: relative; z-index: 1; }
+  .peca .legenda small { display: block; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--ciano); }
+  .peca .legenda strong { font-size: 20px; font-weight: 800; }
+  .peca.g1 { background: linear-gradient(135deg, #111 0%, #2b2b2b 60%, var(--rosa) 160%); }
+  .peca.g2 { background: linear-gradient(135deg, var(--ciano), #0e7490); }
+  .peca.g3 { background: linear-gradient(135deg, var(--rosa), #9d174d); }
+  .peca.g4 { background: linear-gradient(135deg, #1f2937, #111); }
+  .peca.g5 { background: linear-gradient(135deg, #111, #0e7490 140%); }
+
+  /* Processo */
+  .passos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border-top: 2px solid var(--preto); }
+  .passo { padding: 30px 26px 0 0; }
+  .passo b { display: block; font-size: 56px; font-weight: 800; color: var(--rosa); line-height: 1; margin-bottom: 14px; }
+  .passo h3 { font-size: 22px; margin-bottom: 8px; }
+  .passo p { color: var(--texto-2); font-size: 15px; }
+
+  /* Sobre */
+  .sobre { background: var(--preto); color: var(--branco); position: relative; overflow: hidden; }
+  .sobre::before { content: ""; position: absolute; width: 380px; height: 380px; border-radius: 50%; background: var(--rosa); right: -200px; top: -200px; opacity: .9; }
+  .sobre .container { position: relative; display: grid; grid-template-columns: 1.1fr 1fr; gap: 60px; align-items: center; }
+  .sobre p { color: #CFCEC8; font-size: 18px; margin-bottom: 18px; }
+  .numeros { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .numeros div { border: 1px solid #333; border-radius: 22px; padding: 28px; }
+  .numeros strong { display: block; font-size: 22px; font-weight: 800; color: var(--ciano); margin-bottom: 6px; }
+  .numeros span { color: #CFCEC8; font-size: 15px; }
+
+  /* Contato */
+  .contato .container { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; }
+  .contato .canais { display: flex; flex-direction: column; gap: 14px; margin-top: 30px; }
+  .canal { display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--borda); border-radius: 18px; padding: 20px 24px; font-weight: 800; font-size: 18px; transition: border-color .2s; }
+  .canal:hover { border-color: var(--rosa); }
+  .canal small { display: block; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--texto-2); font-weight: 700; }
+  form { background: var(--cinza); border-radius: 26px; padding: 36px; display: flex; flex-direction: column; gap: 16px; }
+  label { font-weight: 700; font-size: 14px; display: flex; flex-direction: column; gap: 8px; }
+  input, select, textarea { font: inherit; font-size: 16px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--borda); background: var(--branco); color: var(--preto); }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--ciano); border-color: transparent; }
+  textarea { min-height: 110px; resize: vertical; }
+  form .botao { justify-content: center; border: 0; cursor: pointer; margin-top: 6px; }
+  form .nota { font-size: 13px; color: var(--texto-2); text-align: center; }
+
+  footer { background: var(--preto); color: #9a998f; padding: 40px 0; font-size: 14px; }
+  footer .container { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; align-items: center; }
+  footer .marca { color: var(--branco); font-size: 15px; }
+
+  .whats { position: fixed; right: 20px; bottom: 20px; z-index: 60; width: 60px; height: 60px; border-radius: 50%; background: #25D366; display: grid; place-items: center; box-shadow: 0 10px 30px rgba(0,0,0,.25); transition: transform .15s; }
+  .whats:hover { transform: scale(1.08); }
+
+  .surgir { opacity: 0; transform: translateY(24px); transition: opacity .7s, transform .7s; }
+  .surgir.visivel { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .surgir { opacity: 1; transform: none; } .faixa div { animation: none; } html { scroll-behavior: auto; } }
+
+  @media (max-width: 980px) {
+    .grade { grid-template-columns: repeat(2, 1fr); }
+    .passos { grid-template-columns: repeat(2, 1fr); row-gap: 30px; }
+    .intro, .sobre .container, .contato .container { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 760px) {
+    section { padding: 80px 0; }
+    .container { padding: 0 16px; }
+    .menu-btn { display: block; }
+    .links { display: none; position: absolute; top: 76px; left: 0; right: 0; background: var(--preto); flex-direction: column; padding: 24px; gap: 22px; }
+    header.aberto .links { display: flex; }
+    header.aberto { background: var(--preto); }
+    .hero::before { width: 300px; height: 300px; top: auto; bottom: -150px; right: -150px; }
+    .sobre::before { width: 220px; height: 220px; right: -120px; top: -120px; }
+    .hero::after { display: none; }
+    .grade, .passos, .numeros { grid-template-columns: 1fr; }
+    .portfolio { grid-template-columns: 1fr; grid-auto-rows: 220px; }
+    .peca.grande { grid-row: auto; } .peca.larga { grid-column: auto; }
+    form { padding: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<header id="topo">
+  <div class="container nav">
+    <a href="#inicio" class="marca"><i></i>MARAGOGI LAB</a>
+    <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="menu">MENU</button>
+    <nav class="links" id="menu">
+      <a href="#servicos">Serviços</a>
+      <a href="#trabalhos">Trabalhos</a>
+      <a href="#processo">Como funciona</a>
+      <a href="#sobre">Sobre</a>
+      <a href="#contato" class="botao botao-rosa">Pedir orçamento</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero" id="inicio">
+    <div class="container">
+      <span class="rotulo">Marketing &amp; Audiovisual</span>
+      <h1>Sua marca <span class="rosa">vista</span> do jeito certo.</h1>
+      <p>Vídeo, foto, drone, redes sociais e tráfego pago. A gente cria o conteúdo e coloca ele na frente de quem compra.</p>
+      <div class="acoes">
+        <a href="#contato" class="botao botao-rosa">Quero um orçamento →</a>
+        <a href="#trabalhos" class="botao botao-linha">Ver trabalhos</a>
+      </div>
+    </div>
+  </section>
+
+  <div class="faixa" aria-hidden="true">
+    <div>
+      <span>VÍDEO</span>✦<span>FOTOGRAFIA</span>✦<span>DRONE</span>✦<span>REELS</span>✦<span>SOCIAL MEDIA</span>✦<span>TRÁFEGO PAGO</span>✦<span>BRANDING</span>✦
+      <span>VÍDEO</span>✦<span>FOTOGRAFIA</span>✦<span>DRONE</span>✦<span>REELS</span>✦<span>SOCIAL MEDIA</span>✦<span>TRÁFEGO PAGO</span>✦<span>BRANDING</span>✦
+    </div>
+  </div>
+
+  <section id="servicos">
+    <div class="container">
+      <div class="intro surgir">
+        <div>
+          <span class="rotulo">O que fazemos</span>
+          <h2>Do roteiro ao <span class="rosa">resultado</span>.</h2>
+        </div>
+        <p>Produção audiovisual e marketing digital no mesmo lugar. Você fala com uma equipe só, e o conteúdo já nasce pensado para vender.</p>
+      </div>
+      <div class="grade">
+        <article class="servico surgir"><span class="num">01</span><h3>Vídeo institucional</h3><p>Filmes que contam a história da sua empresa, do roteiro à finalização.</p><span class="tag">Audiovisual</span></article>
+        <article class="servico surgir"><span class="num">02</span><h3>Reels e vídeos curtos</h3><p>Conteúdo vertical com ritmo de rede social, feito para prender nos 3 primeiros segundos.</p><span class="tag">Audiovisual</span></article>
+        <article class="servico surgir"><span class="num">03</span><h3>Imagens aéreas com drone</h3><p>Tomadas aéreas para imóveis, pousadas, eventos e turismo.</p><span class="tag">Audiovisual</span></article>
+        <article class="servico surgir"><span class="num">04</span><h3>Cobertura e diárias</h3><p>Equipe e equipamento para eventos, gravações e campanhas.</p><span class="tag">Audiovisual</span></article>
+        <article class="servico surgir"><span class="num">05</span><h3>Ensaio fotográfico</h3><p>Fotos de produto, ambiente e equipe com direção e tratamento.</p><span class="tag">Fotografia</span></article>
+        <article class="servico surgir"><span class="num">06</span><h3>Gestão de redes sociais</h3><p>Planejamento, criação e publicação mensal, com relatório de resultados.</p><span class="tag">Social media</span></article>
+        <article class="servico surgir"><span class="num">07</span><h3>Tráfego pago</h3><p>Anúncios no Instagram, Facebook e Google com acompanhamento de cada real investido.</p><span class="tag">Tráfego pago</span></article>
+        <article class="servico surgir"><span class="num">08</span><h3>Identidade visual</h3><p>Logo, cores e tipografia que deixam sua marca reconhecível em qualquer tela.</p><span class="tag">Branding</span></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="trabalhos" id="trabalhos">
+    <div class="container">
+      <div class="intro surgir">
+        <div>
+          <span class="rotulo">Portfólio</span>
+          <h2>Trabalhos <span class="rosa">recentes</span>.</h2>
+        </div>
+        <p>Uma amostra do que produzimos. Veja mais no nosso Instagram.</p>
+      </div>
+      <!-- Para trocar por fotos reais: coloque a imagem na pasta site/img e adicione <img src="img/arquivo.jpg" alt="descrição"> dentro da peça. -->
+      <div class="portfolio">
+        <a class="peca grande g1 surgir" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="legenda"><small>Vídeo institucional</small><strong>Seu projeto aqui</strong></div></a>
+        <a class="peca g2 surgir" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="legenda"><small>Drone</small><strong>Imagens aéreas</strong></div></a>
+        <a class="peca g3 surgir" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="legenda"><small>Reels</small><strong>Vídeos curtos</strong></div></a>
+        <a class="peca larga g4 surgir" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="legenda"><small>Fotografia</small><strong>Ensaio de produto</strong></div></a>
+      </div>
+      <div style="text-align:center;margin-top:40px" class="surgir">
+        <a href="https://instagram.com/maragogilab" target="_blank" rel="noopener" class="botao botao-linha">Ver mais no @maragogilab →</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="processo">
+    <div class="container">
+      <div class="intro surgir">
+        <div>
+          <span class="rotulo">Como funciona</span>
+          <h2>Simples, do <span class="rosa">primeiro</span> papo à entrega.</h2>
+        </div>
+        <p>Proposta clara, prazo combinado e você acompanhando cada etapa.</p>
+      </div>
+      <div class="passos">
+        <div class="passo surgir"><b>1</b><h3>Conversa</h3><p>Entendemos seu negócio, seu público e o que você quer alcançar.</p></div>
+        <div class="passo surgir"><b>2</b><h3>Proposta</h3><p>Você recebe o orçamento com serviços, prazo e forma de pagamento.</p></div>
+        <div class="passo surgir"><b>3</b><h3>Produção</h3><p>Roteiro, gravação, edição e criação, com revisão antes da entrega.</p></div>
+        <div class="passo surgir"><b>4</b><h3>Resultado</h3><p>Conteúdo publicado e números acompanhados para melhorar a cada mês.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sobre" id="sobre">
+    <div class="container">
+      <div class="surgir">
+        <span class="rotulo">Sobre</span>
+        <h2>Criatividade com <span style="color:var(--ciano)">estratégia</span>.</h2>
+        <p>A Maragogi Lab é uma agência de marketing e produção audiovisual. Juntamos câmera, edição e marketing digital para que cada vídeo, foto e post tenha um objetivo: trazer clientes para o seu negócio.</p>
+        <p>À frente da agência está Rafael Vieira, cuidando de cada projeto de perto.</p>
+      </div>
+      <div class="numeros surgir">
+        <div><strong>Tudo em um lugar</strong><span>Produção e marketing com uma equipe só.</span></div>
+        <div><strong>Proposta clara</strong><span>Você sabe o que vai receber e quanto vai pagar.</span></div>
+        <div><strong>Feito para rede</strong><span>Formatos pensados para Instagram, TikTok e YouTube.</span></div>
+        <div><strong>Resultado medido</strong><span>Relatórios com alcance, interações e seguidores.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="contato" id="contato">
+    <div class="container">
+      <div class="surgir">
+        <span class="rotulo">Contato</span>
+        <h2>Vamos tirar seu projeto do <span class="rosa">papel</span>?</h2>
+        <p style="color:var(--texto-2);font-size:18px">Conte rapidinho o que você precisa. A resposta chega pelo WhatsApp.</p>
+        <div class="canais">
+          <a class="canal" id="linkWhats" href="#" target="_blank" rel="noopener"><span><small>WhatsApp</small><span id="textoWhats">Chamar no WhatsApp</span></span>→</a>
+          <a class="canal" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><span><small>Instagram</small>@maragogilab</span>→</a>
+          <a class="canal" id="linkEmail" href="mailto:"><span><small>E-mail</small><span id="textoEmail"></span></span>→</a>
+        </div>
+      </div>
+      <form id="formulario" class="surgir">
+        <label>Seu nome<input name="nome" required autocomplete="name"></label>
+        <label>Empresa<input name="empresa" autocomplete="organization"></label>
+        <label>O que você precisa?
+          <select name="servico">
+            <option>Vídeo institucional</option>
+            <option>Reels / vídeos curtos</option>
+            <option>Imagens com drone</option>
+            <option>Cobertura de evento</option>
+            <option>Ensaio fotográfico</option>
+            <option>Gestão de redes sociais</option>
+            <option>Tráfego pago</option>
+            <option>Identidade visual</option>
+            <option>Ainda não sei, quero conversar</option>
+          </select>
+        </label>
+        <label>Conte um pouco do projeto<textarea name="mensagem" placeholder="Data, local, objetivo..."></textarea></label>
+        <button class="botao botao-rosa" type="submit">Enviar pelo WhatsApp →</button>
+        <p class="nota">Abre o WhatsApp com a mensagem pronta.</p>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container">
+    <span class="marca">MARAGOGI LAB</span>
+    <span>© <span id="ano"></span> Maragogi Lab · Marketing e produção audiovisual</span>
+    <a href="https://instagram.com/maragogilab" target="_blank" rel="noopener">@maragogilab</a>
+  </div>
+</footer>
+
+<a class="whats" id="botaoWhats" href="#" target="_blank" rel="noopener" aria-label="Falar no WhatsApp">
+  <svg width="30" height="30" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M17.5 14.4c-.3-.1-1.8-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6l.4-.5c.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.1.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2z"/></svg>
+</a>
+
+<script>
+  // ===== Ajuste aqui os seus contatos =====
+  const WHATSAPP = '5582999999999';           // DDI + DDD + número, só dígitos
+  const EMAIL = 'contato@maragogilab.com';
+  // ========================================
+
+  const linkZap = (texto) => 'https://wa.me/' + WHATSAPP + (texto ? '?text=' + encodeURIComponent(texto) : '');
+  const ola = 'Olá, Maragogi Lab! Vim pelo site e quero um orçamento.';
+  document.getElementById('linkWhats').href = linkZap(ola);
+  document.getElementById('botaoWhats').href = linkZap(ola);
+  const n = WHATSAPP.replace(/^55/, '');
+  document.getElementById('textoWhats').textContent = '(' + n.slice(0, 2) + ') ' + n.slice(2, -4) + '-' + n.slice(-4);
+  document.getElementById('linkEmail').href = 'mailto:' + EMAIL;
+  document.getElementById('textoEmail').textContent = EMAIL;
+  document.getElementById('ano').textContent = new Date().getFullYear();
+
+  document.getElementById('formulario').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const d = new FormData(e.target);
+    const linhas = [
+      'Olá, Maragogi Lab! Vim pelo site.',
+      'Nome: ' + d.get('nome'),
+      d.get('empresa') ? 'Empresa: ' + d.get('empresa') : '',
+      'Preciso de: ' + d.get('servico'),
+      d.get('mensagem') ? 'Projeto: ' + d.get('mensagem') : '',
+    ].filter(Boolean);
+    window.open(linkZap(linhas.join('\n')), '_blank', 'noopener');
+  });
+
+  const topo = document.getElementById('topo');
+  const rolar = () => topo.classList.toggle('rolou', scrollY > 40);
+  addEventListener('scroll', rolar, { passive: true }); rolar();
+
+  const menuBtn = document.getElementById('menuBtn');
+  menuBtn.addEventListener('click', () => {
+    const aberto = topo.classList.toggle('aberto');
+    menuBtn.setAttribute('aria-expanded', aberto);
+    menuBtn.textContent = aberto ? 'FECHAR' : 'MENU';
+  });
+  document.querySelectorAll('#menu a').forEach(a => a.addEventListener('click', () => {
+    topo.classList.remove('aberto'); menuBtn.setAttribute('aria-expanded', false); menuBtn.textContent = 'MENU';
+  }));
+
+  const obs = new IntersectionObserver((itens) => itens.forEach(i => {
+    if (i.isIntersecting) { i.target.classList.add('visivel'); obs.unobserve(i.target); }
+  }), { threshold: 0.12 });
+  document.querySelectorAll('.surgir').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>
