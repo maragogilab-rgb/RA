@@ -31,4 +31,11 @@ ERP web para a Maragogi Lab (agência de marketing e audiovisual): propostas, jo
 
 - `settings.json`: permissões e hooks
 - `hooks/memoria.js` (início da sessão), `hooks/proteger-comandos.js` (antes do Bash), `hooks/checar-sintaxe.js` (depois de editar .js)
-- Comandos: `/testar`, `/commit-push-pr`, `/lembrar`
+- Comandos: `/testar`, `/commit-push-pr`, `/lembrar`, `/analisar-video`
+
+## Plugins opcionais (instalar à mão no Claude Code)
+
+- **watch** (vídeo → quadros + transcrição, usado por `/analisar-video`). Precisa de Python 3.10+, ffmpeg e yt-dlp (`brew install python ffmpeg yt-dlp`):
+  `/plugin marketplace add bradautomates/claude-video` e depois `/plugin install watch@claude-video`
+- **claude-mem** (memória automática completa entre sessões; precisa do Bun). Substitui o hook simples `hooks/memoria.js`:
+  `/plugin marketplace add thedotmack/claude-mem` e depois `/plugin install claude-mem@thedotmack`
