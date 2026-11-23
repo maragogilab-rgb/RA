@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Maragogi Lab — Marketing e Audiovisual</title>
-<meta name="description" content="Maragogi Lab: agência de marketing e produção audiovisual. Vídeo, foto, drone, redes sociais, tráfego pago e identidade visual.">
+<title>Maragogi Lab | Marketing e produção audiovisual em Maceió</title>
+<meta name="description" content="Maragogi Lab: marketing e produção audiovisual em Maceió/AL. Cobertura de eventos em tempo real, reels, foto e vídeo 4K, drone, gestão de redes, gráfica e locação.">
 <meta property="og:title" content="Maragogi Lab — Marketing e Audiovisual">
 <meta property="og:description" content="Câmera e estratégia para marcas que querem ser vistas.">
 <meta property="og:type" content="website">
@@ -163,6 +163,17 @@
   .case.escondido { display: none; }
   .ver-mais { text-align: center; margin-top: 50px; }
 
+  /* Depoimentos */
+  .depoimentos { padding-top: 120px; padding-bottom: 140px; border-top: 1px solid var(--linha); }
+  .depoimentos h2 { font-size: clamp(40px, 6.5vw, 100px); margin: 18px 0 60px; }
+  .depoimentos h2 .mao { font-size: .8em; }
+  .falas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .falas blockquote { border: 1px solid var(--linha); border-radius: 4px; padding: clamp(24px, 3vw, 40px); display: flex; flex-direction: column; justify-content: space-between; gap: 30px; }
+  .falas p { font-size: clamp(20px, 2vw, 26px); font-weight: 300; line-height: 1.35; }
+  .falas cite { font-style: normal; color: var(--cinza-2); font-size: 14px; }
+  .falas cite b { display: block; color: var(--branco); font-size: 16px; margin-bottom: 4px; }
+  @media (max-width: 900px) { .falas { grid-template-columns: 1fr; } }
+
   /* Contato */
   .contato { padding-top: 140px; padding-bottom: 140px; border-top: 1px solid var(--linha); }
   .contato h2 { font-size: clamp(56px, 10vw, 160px); margin-bottom: 60px; }
@@ -252,6 +263,7 @@
   <section class="hero" id="inicio">
     <div class="midia vazia" id="fundoHero" data-video="img/reel.mp4" data-poster="img/capa.jpg"></div>
     <div class="conteudo wrap">
+      <span class="mini surgir" style="color:var(--rosa);display:block;margin-bottom:18px">Marketing e audiovisual · Maceió/AL</span>
       <h1 class="caps surgir">Vídeo /<br>Marketing /<br>Resultado</h1>
       <button class="reel surgir" id="abrirReel"><b>▶</b><u>Assistir reel</u></button>
     </div>
@@ -262,7 +274,7 @@
     <div class="surgir">
       <span class="mini">#MaragogiLab</span>
       <p>A gente transforma câmera e estratégia em <span class="risco sub">clientes novos.<svg viewBox="0 0 200 12" preserveAspectRatio="none"><path d="M2 8 C 50 2, 120 12, 198 5"/></svg></span></p>
-      <p>Produzimos vídeo, foto e conteúdo para redes, e cuidamos do marketing que faz tudo isso chegar em quem importa.</p>
+      <p>Cobertura em tempo real, foto e vídeo 4K, drone e gestão de redes. Seu evento postado enquanto acontece.</p>
       <p>Bora tirar a sua ideia do <span class="risco circ">papel<svg viewBox="0 0 200 80" preserveAspectRatio="none"><path d="M30 12 C 120 -6, 205 18, 190 48 C 176 78, 40 82, 10 52 C -8 30, 40 8, 110 10"/></svg></span>?</p>
       <a href="#contato" class="pill">Fale conosco <b>→</b></a>
     </div>
@@ -294,8 +306,8 @@
     </div>
     <div class="surgir">
       <h2 class="caps">Somos um<br>laboratório criativo</h2>
-      <span class="mao">vídeo, foto, redes sociais e tráfego pago.</span>
-      <p>A Maragogi Lab junta produção audiovisual e marketing digital no mesmo lugar. Você fala com uma equipe só: a gente pensa a estratégia, grava, edita, publica e acompanha os números, para que cada conteúdo tenha um objetivo claro.</p>
+      <span class="mao">audiovisual, redes, gráfica e locação.</span>
+      <p>A Maragogi Lab é uma equipe local de Maceió que cuida de tudo o que o seu evento ou a sua marca precisa: da captação com câmeras Sony e drone à edição, das redes sociais à impressão e à decoração. Um parceiro só, do começo ao fim.</p>
       <a href="#contato" class="pill">Orçar um projeto <b>→</b></a>
     </div>
   </section>
@@ -303,29 +315,30 @@
   <section class="servicos wrap" id="servicos">
     <span class="mini">O que fazemos</span>
     <ol class="caps">
-      <li class="surgir"><sup>01</sup>Vídeo institucional</li>
+      <li class="surgir"><sup>01</sup>Cobertura em tempo real</li>
       <li class="surgir"><sup>02</sup>Reels e vídeos curtos</li>
-      <li class="surgir"><sup>03</sup>Imagens aéreas com drone</li>
-      <li class="surgir"><sup>04</sup>Cobertura de eventos</li>
-      <li class="surgir"><sup>05</sup>Ensaio fotográfico</li>
+      <li class="surgir"><sup>03</sup>Casamentos e eventos</li>
+      <li class="surgir"><sup>04</sup>Imagens aéreas com drone</li>
+      <li class="surgir"><sup>05</sup>Foto e vídeo institucional</li>
       <li class="surgir"><sup>06</sup>Gestão de redes sociais</li>
       <li class="surgir"><sup>07</sup>Tráfego pago</li>
-      <li class="surgir"><sup>08</sup>Identidade visual</li>
+      <li class="surgir"><sup>08</sup>Gráfica</li>
+      <li class="surgir"><sup>09</sup>Locação para festas</li>
     </ol>
-    <p class="descricao surgir">Do roteiro ao relatório: planejamos, produzimos e medimos. Tudo pensado para o formato de cada rede.</p>
+    <p class="descricao surgir">Da captação à impressão, passando pela decoração. Adesivos, placas, banners e convites na gráfica; brinquedos, mesas, cadeiras e decoração na locação.</p>
   </section>
 
   <section class="audiovisual wrap">
     <span class="mao surgir">Nosso forte</span>
     <h2 class="caps surgir">Produção audiovisual do começo ao fim.</h2>
-    <p class="surgir">Equipe própria, câmera, drone e edição. Criamos uma estética para cada cliente, para marcas que querem se destacar no feed e fora dele.</p>
+    <p class="surgir">Equipe local, câmeras Sony, drone e edição ágil. Stories, reels e fotos publicados durante o evento, para quem não pôde ir acompanhar tudo na hora.</p>
     <!-- Foto ou vídeo largo: site/img/producao.jpg -->
     <div class="midia vazia surgir" data-img="img/producao.jpg"><span class="etiqueta mini">Bastidores</span></div>
     <div class="cards">
-      <div class="card surgir"><b>01</b><h3>Conteúdo para redes</h3><p>Reels, stories e vídeos curtos com ritmo de rede social.</p></div>
-      <div class="card surgir"><b>02</b><h3>Vídeo institucional</h3><p>A história da sua empresa contada com roteiro, direção e finalização.</p></div>
+      <div class="card surgir"><b>01</b><h3>Tempo real</h3><p>Stories, reels e fotos postados enquanto o evento acontece.</p></div>
+      <div class="card surgir"><b>02</b><h3>Casamentos</h3><p>Da cerimônia ao aftermovie, com entrega ágil.</p></div>
       <div class="card surgir"><b>03</b><h3>Drone e aéreas</h3><p>Imagens aéreas para turismo, imóveis, pousadas e eventos.</p></div>
-      <div class="card surgir"><b>04</b><h3>Eventos e after movies</h3><p>Cobertura completa e vídeos curtos entregues rápido.</p></div>
+      <div class="card surgir"><b>04</b><h3>Corporativo</h3><p>Eventos, shows e institucionais com alto padrão de imagem.</p></div>
     </div>
   </section>
 
@@ -334,21 +347,30 @@
       <h2 class="caps surgir">Cases</h2>
       <div class="filtros" id="filtros">
         <button class="ativo" data-filtro="todos">Todos</button>
-        <button data-filtro="audiovisual">Audiovisual</button>
-        <button data-filtro="social">Social media</button>
-        <button data-filtro="foto">Fotografia</button>
+        <button data-filtro="audiovisual">Eventos</button>
+        <button data-filtro="social">Reels</button>
+        <button data-filtro="foto">Casamentos</button>
       </div>
     </div>
-    <!-- Para cada case: troque o título e o cliente, e coloque a foto em site/img (ex.: data-img="img/case1.jpg") -->
+    <!-- Para cada case: coloque a foto em site/img (ex.: img/case1.jpg) e, se quiser, troque título e legenda -->
     <div class="grade">
-      <a class="case surgir" data-tipo="audiovisual" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case1.jpg"></div><h3>Nome do projeto</h3><p>Cliente · Ano</p></a>
-      <a class="case surgir" data-tipo="social" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case2.jpg"></div><h3>Nome do projeto</h3><p>Cliente · Ano</p></a>
-      <a class="case surgir" data-tipo="foto" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case3.jpg"></div><h3>Nome do projeto</h3><p>Cliente · Ano</p></a>
-      <a class="case surgir" data-tipo="audiovisual" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case4.jpg"></div><h3>Nome do projeto</h3><p>Cliente · Ano</p></a>
-      <a class="case surgir" data-tipo="social" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case5.jpg"></div><h3>Nome do projeto</h3><p>Cliente · Ano</p></a>
-      <a class="case surgir" data-tipo="audiovisual" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case6.jpg"></div><h3>Nome do projeto</h3><p>Cliente · Ano</p></a>
+      <a class="case surgir" data-tipo="foto" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case1.jpg"></div><h3>Casamentos</h3><p>Cerimônia e festa</p></a>
+      <a class="case surgir" data-tipo="audiovisual" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case2.jpg"></div><h3>Eventos</h3><p>Cobertura ao vivo</p></a>
+      <a class="case surgir" data-tipo="social" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case3.jpg"></div><h3>Marcas</h3><p>Reels</p></a>
+      <a class="case surgir" data-tipo="audiovisual" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case4.jpg"></div><h3>Corporativo</h3><p>Eventos e institucionais</p></a>
+      <a class="case surgir" data-tipo="audiovisual" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case5.jpg"></div><h3>Drone</h3><p>Imagens aéreas</p></a>
+      <a class="case surgir" data-tipo="audiovisual" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case6.jpg"></div><h3>Festas</h3><p>Locação e decoração</p></a>
     </div>
     <div class="ver-mais"><a class="pill" href="https://instagram.com/maragogilab" target="_blank" rel="noopener">Ver mais no Instagram <b>→</b></a></div>
+  </section>
+
+  <section class="depoimentos wrap">
+    <span class="mini surgir">Depoimentos</span>
+    <h2 class="caps surgir">Quem contratou, <span class="mao">recomenda.</span></h2>
+    <div class="falas">
+      <blockquote class="surgir"><p>“Confiamos na Maragogi Lab e não nos arrependemos. Entrega rápida e qualidade impecável!”</p><cite><b>André Assessoria</b>Cobertura de evento corporativo</cite></blockquote>
+      <blockquote class="surgir"><p>“Pontualidade impecável, prazos respeitados e horários rigorosos. Acompanhamento em tempo real e sempre superando expectativas. A Maragogi Lab é nosso parceiro ideal!”</p><cite><b>Rosa Amélia</b>Gerente, Banco do Brasil · Cobertura de evento corporativo</cite></blockquote>
+    </div>
   </section>
 
   <section class="contato wrap" id="contato">
@@ -361,7 +383,7 @@
       </a>
       <a class="opcao surgir" href="#formulario">
         <h3>Mandar pelo formulário</h3>
-        <p>Conte o projeto aqui embaixo. A mensagem chega pronta no nosso WhatsApp.</p>
+        <p>Conte data, tipo de evento e objetivo. A mensagem chega pronta no nosso WhatsApp.</p>
         <span>Preencher formulário ↓</span>
       </a>
     </div>
@@ -371,14 +393,15 @@
       <label>WhatsApp<input name="telefone" type="tel" autocomplete="tel"></label>
       <label>Serviço
         <select name="servico">
-          <option>Vídeo institucional</option>
+          <option>Cobertura de evento em tempo real</option>
+          <option>Casamento</option>
           <option>Reels / vídeos curtos</option>
           <option>Imagens com drone</option>
-          <option>Cobertura de evento</option>
-          <option>Ensaio fotográfico</option>
+          <option>Foto e vídeo institucional</option>
           <option>Gestão de redes sociais</option>
           <option>Tráfego pago</option>
-          <option>Identidade visual</option>
+          <option>Gráfica</option>
+          <option>Locação para festas</option>
           <option>Ainda não sei</option>
         </select>
       </label>
@@ -392,7 +415,7 @@
   <div class="rodape">
     <div>
       <h4>Maragogi Lab</h4>
-      <p>Agência de marketing e produção audiovisual</p>
+      <p>Rua Santo Antônio, Q A, Nº 5<br>Tabuleiro dos Martins, Maceió/AL</p>
       <a class="link-email" href="#"></a>
       <a class="link-zap tel" href="#" target="_blank" rel="noopener"></a>
     </div>
@@ -407,7 +430,7 @@
     </div>
   </div>
   <div class="marca-final caps">Maragogi Lab</div>
-  <div class="base"><span>Maragogi Lab ©<span class="ano"></span> todos os direitos reservados</span><a href="#inicio">Voltar ao topo ↑</a></div>
+  <div class="base"><span>Maragogi Lab ©<span class="ano"></span> · Maceió/AL · Marketing · Audiovisual · Gráfica · Locação</span><a href="#inicio">Voltar ao topo ↑</a></div>
 </footer>
 
 <a class="zap link-zap" href="#" target="_blank" rel="noopener" aria-label="Falar no WhatsApp">
@@ -421,8 +444,8 @@
 
 <script>
   // ===== Ajuste aqui os seus contatos =====
-  const WHATSAPP = '5582999999999';           // DDI + DDD + número, só dígitos
-  const EMAIL = 'contato@maragogilab.com';
+  const WHATSAPP = '5582987184800';           // DDI + DDD + número, só dígitos
+  const EMAIL = 'maragogilab@gmail.com';
   const REEL = 'img/reel.mp4';                 // vídeo do botão "Assistir reel"
   // ========================================
 
