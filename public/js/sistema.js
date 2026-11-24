@@ -129,6 +129,7 @@ export async function painel(raiz) {
     d.sistema_vazio && estado.usuario.papel === 'admin' ? primeirosPassos() : null,
     d.lembretes.length ? cartaoLembretes(d.lembretes) : null,
     d.mei ? medidorMei(d.mei) : null,
+    cartaoCaptacao(),
     h('div', { class: 'kpis' },
       kpi('Recebido no mês', R$(d.recebido_mes), null, `Saldo do mês: ${R$(d.saldo_mes)}`),
       kpi('Receita recorrente (fee)', R$(d.receita_recorrente), null, `${d.qtd_contratos} contrato(s) ativo(s)`),
@@ -190,12 +191,24 @@ function primeirosPassos() {
 }
 
 function cartaoLembretes(lembretes) {
-  const icone = { orcamento: '⏳', pos_venda: '🤝', follow_up: '📞', das: '🧾', tarefa: '☑', post: '📣' };
+  const icone = { lead: '🔥', orcamento: '⏳', pos_venda: '🤝', follow_up: '📞', das: '🧾', tarefa: '☑', post: '📣' };
   return h('section', { class: 'cartao lembretes' },
     h('h2', { class: 'secao' }, `Lembretes (${lembretes.length})`),
     h('ul', { class: 'lista-simples' }, lembretes.map((l) => h('li', {},
       h('a', { href: l.link, ...(l.link.startsWith('http') ? { target: '_blank', rel: 'noopener' } : {}) },
         h('span', { 'aria-hidden': 'true' }, icone[l.tipo] || '•'), h('span', { class: 'cresce quebra' }, l.texto))))));
+}
+
+// Links da página pública de orçamento, um por canal, para saber de onde vem cada cliente.
+function cartaoCaptacao() {
+  const canais = [['instagram', 'Bio do Instagram'], ['google', 'Perfil no Google'], ['whatsapp', 'Status/Catálogo do WhatsApp'], ['cartao', 'Cartão / QR code']];
+  const link = (o) => `${location.origin}/pedir-orcamento?origem=${o}`;
+  return h('details', { class: 'cartao' },
+    h('summary', {}, h('strong', {}, '🔗 Links para clientes pedirem orçamento')),
+    h('p', { class: 'mudo' }, 'Cada pedido entra como lead em "Clientes e leads" e aparece aqui nos lembretes.'),
+    h('ul', { class: 'lista-simples' }, canais.map(([o, nome]) => h('li', {},
+      h('span', { class: 'cresce quebra' }, h('strong', {}, nome), h('br'), h('small', {}, link(o))),
+      btn('Copiar', () => navigator.clipboard.writeText(link(o)).then(() => aviso('Link copiado')), 'btn-pequeno')))));
 }
 
 function barra(valor, meta, rotulo) {

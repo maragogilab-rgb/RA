@@ -328,6 +328,8 @@ const COLUNAS_EXTRAS = {
     estagio: 'TEXT',
     classificacao: 'TEXT',
     origem: 'TEXT',
+    // Último pedido feito pela página pública /pedir-orcamento.
+    pedido_em: 'TEXT',
     prazo_faturamento: 'TEXT',
     proximo_contato: 'TEXT',
   },
