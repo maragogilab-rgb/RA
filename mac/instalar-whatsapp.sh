@@ -10,6 +10,10 @@
 
 set -euo pipefail
 
+# Tudo fica dentro de main(): assim o bash lê o script inteiro antes de rodar
+# (com "curl | bash", um comando que lê a entrada engoliria o resto do script).
+main() {
+
 PASTA="$HOME/WhatsApp-Maragogi-Lab"
 PASTA_ERP="$HOME/ERP-Maragogi-Lab"
 PORTA_ERP=3737
@@ -107,7 +111,7 @@ set -a; . "$ENV"; set +a
 # 4. Liga tudo.
 titulo "Ligando o n8n e o WhatsApp (na primeira vez baixa ~4 GB, pode demorar)…"
 cd "$PASTA"
-docker compose up -d --quiet-pull 2>&1 | grep -v "^ *$" | tail -5
+docker compose up -d --quiet-pull </dev/null 2>&1 | grep -v "^ *$" | tail -5
 echo "Esperando o n8n responder…"
 for _ in $(seq 1 90); do curl -fs http://localhost:5678/healthz >/dev/null 2>&1 && break; sleep 2; done
 curl -fs http://localhost:5678/healthz >/dev/null 2>&1 || falha "o n8n não ligou. Rode: cd $PASTA && docker compose logs n8n"
@@ -116,15 +120,15 @@ curl -fs http://localhost:8080 >/dev/null 2>&1 || falha "o Evolution API não li
 
 # 5. Fluxo do n8n: importa uma vez e publica.
 titulo "Instalando o fluxo no n8n…"
-n8n() { docker compose exec -T n8n n8n "$@" 2>&1 | grep -v "telemetry\|getaddrinfo\|onlookup" || true; }
+n8n() { docker compose exec -T n8n n8n "$@" </dev/null 2>&1 | grep -v "telemetry\|getaddrinfo\|onlookup" || true; }
 ID=$(n8n list:workflow | grep -F "|$NOME_FLUXO" | head -1 | cut -d'|' -f1 || true)
 if [ -z "$ID" ]; then
-  docker compose cp fluxo-whatsapp-lead.json n8n:/tmp/fluxo.json >/dev/null 2>&1
+  docker compose cp fluxo-whatsapp-lead.json n8n:/tmp/fluxo.json </dev/null >/dev/null 2>&1
   n8n import:workflow --input=/tmp/fluxo.json >/dev/null
   ID=$(n8n list:workflow | grep -F "|$NOME_FLUXO" | head -1 | cut -d'|' -f1 || true)
   [ -n "$ID" ] || falha "não consegui importar o fluxo no n8n."
   n8n publish:workflow --id="$ID" >/dev/null
-  docker compose restart n8n >/dev/null 2>&1
+  docker compose restart n8n </dev/null >/dev/null 2>&1
   for _ in $(seq 1 60); do curl -fs http://localhost:5678/healthz >/dev/null 2>&1 && break; sleep 2; done
   echo "Fluxo instalado e ligado."
 else
@@ -133,7 +137,7 @@ fi
 
 # 6. WhatsApp: instância e webhook.
 titulo "Preparando o WhatsApp…"
-./configurar-whatsapp.sh "$INSTANCIA" >/dev/null
+./configurar-whatsapp.sh "$INSTANCIA" </dev/null >/dev/null
 ESTADO=$(curl -fs "http://localhost:8080/instance/connectionState/$INSTANCIA" -H "apikey: $EVOLUTION_APIKEY" || true)
 
 if printf '%s' "$ESTADO" | grep -q '"state":"open"'; then
@@ -176,3 +180,6 @@ echo "  WhatsApp (Evolution): http://localhost:8080/manager   (chave: veja EVOLU
 echo
 echo "Importante: deixe o Docker abrindo junto com o Mac"
 echo "(Docker → Settings → General → Start Docker Desktop when you sign in)."
+}
+
+main "$@"
