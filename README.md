@@ -25,6 +25,18 @@ Roda com **um único comando**, sem dependências externas: apenas Node.js 22+ (
 Todas as listagens têm busca, filtros e **exportação para CSV** (abre no Excel).
 Funciona no computador e no celular, com tema claro e escuro.
 
+## WhatsApp e automações
+
+Novo contato no WhatsApp vira **lead no ERP** com tarefa para responder e recebe **boas-vindas automáticas**,
+usando n8n + Evolution API. Passo a passo em [automacao/WHATSAPP-N8N.md](automacao/WHATSAPP-N8N.md).
+
+## Skills de marketing para o Claude
+
+A pasta `.claude/skills` traz 54 skills de marketing ([coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills), licença MIT):
+copywriting, anúncios, SEO, redes sociais, e-mail, CRO, preços, lançamentos e mais. Abrindo o Claude Code neste
+repositório, é só pedir (ex.: "escreva a copy da landing page do cliente X") que a skill certa entra sozinha.
+O contexto da agência que elas usam fica em [.agents/product-marketing.md](.agents/product-marketing.md): mantenha atualizado.
+
 ## Como usar
 
 **No seu Mac, com um ícone na mesa (sem hospedagem):** siga [INSTALAR-NO-MAC.md](INSTALAR-NO-MAC.md). É uma linha no Terminal:
@@ -135,6 +147,7 @@ Na NFS-e Nacional, o *código de tributação nacional* (6 dígitos) é montado 
 | `ERP_LOG` | — | Use `0` para desativar o log de requisições |
 | `ERP_NFSE_AUTO` | — | Use `0` para desligar o piloto automático de notas no servidor |
 | `ERP_NFSE_INTERVALO` | `2` | De quantos em quantos minutos o piloto automático verifica |
+| `ERP_INTEGRACAO_TOKEN` | — | Liga a entrada de leads vindos do WhatsApp/n8n ([automacao/WHATSAPP-N8N.md](automacao/WHATSAPP-N8N.md)) |
 
 **Backup:** todos os dados ficam em `data/erp.db`. Copie esse arquivo regularmente.
 
