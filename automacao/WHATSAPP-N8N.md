@@ -14,6 +14,16 @@ WhatsApp → Evolution API → n8n → ERP (lead + tarefa)
                               └→ Evolution API → resposta automática (só no 1º contato)
 ```
 
+## Jeito mais fácil: no Mac, com um comando
+
+Cole no Terminal (atualiza o ERP, liga a integração, sobe tudo e abre o QR Code):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maragogilab-rgb/RA/HEAD/mac/instalar-whatsapp.sh | bash
+```
+
+Os passos abaixo são para instalar à mão ou num servidor.
+
 ## O que tem nesta pasta
 
 | Arquivo | Para quê |

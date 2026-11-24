@@ -74,6 +74,11 @@ if [ ! -f "$PASTA/dados/erp.db" ]; then
   unset SENHA SENHA2
 fi
 
+# Token da integração com o WhatsApp (n8n). Criado uma vez e mantido nas atualizações.
+TOKEN_ARQ="$PASTA/dados/integracao.token"
+[ -s "$TOKEN_ARQ" ] || { openssl rand -hex 24 >"$TOKEN_ARQ"; chmod 600 "$TOKEN_ARQ"; }
+TOKEN_INTEGRACAO=$(cat "$TOKEN_ARQ")
+
 # 4. Deixa o ERP ligado em segundo plano sempre que o Mac estiver ligado
 #    (assim as notas automáticas continuam saindo mesmo com a janela fechada).
 titulo "Ligando o ERP…"
@@ -98,6 +103,7 @@ cat >"$PLIST" <<PLIST
     <key>PORT</key><string>$PORTA</string>
     <key>HOST</key><string>127.0.0.1</string>
     <key>ERP_LOG</key><string>0</string>
+    <key>ERP_INTEGRACAO_TOKEN</key><string>$TOKEN_INTEGRACAO</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
@@ -136,8 +142,10 @@ for _ in $(seq 1 40); do
 done
 if curl -fs "http://127.0.0.1:$PORTA/api/saude" >/dev/null 2>&1; then
   titulo "Pronto! O ícone \"$NOME_APP\" está na sua mesa."
-  echo "Abrindo o ERP agora…"
-  /bin/bash "$PASTA/app/mac/abrir.sh" || true
+  if [ "${ERP_NAO_ABRIR:-}" != 1 ]; then
+    echo "Abrindo o ERP agora…"
+    /bin/bash "$PASTA/app/mac/abrir.sh" || true
+  fi
 else
   falha "o ERP não ligou. Veja o arquivo $PASTA/dados/erp.log e mande para quem te ajuda."
 fi
