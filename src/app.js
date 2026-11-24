@@ -26,7 +26,7 @@ const SEGURANCA = {
 
 function criarRouter(db, opcoes) {
   const router = new Router();
-  for (const m of ['sistema', 'cadastros', 'projetos', 'contratos', 'financeiro', 'notas', 'agenda', 'conteudo', 'captacao']) {
+  for (const m of ['sistema', 'cadastros', 'projetos', 'contratos', 'financeiro', 'notas', 'agenda', 'conteudo', 'integracoes', 'captacao']) {
     require(`./modulos/${m}`).registrar(router, db, opcoes);
   }
   return router;
@@ -53,11 +53,11 @@ function servirEstatico(req, res, caminho) {
 // opcoes.fetchNfse permite substituir a chamada HTTP à API de NFS-e (usado nos testes).
 // opcoes.requisitarNacional substitui a conexão com a NFS-e Nacional (usado nos testes).
 // opcoes.fetchInstagram substitui as chamadas à API do Instagram (usado nos testes).
-function criarApp(db, { seguro = false, log = true, fetchNfse, requisitarNacional, fetchInstagram, confiarProxy = false } = {}) {
+function criarApp(db, { seguro = false, log = true, fetchNfse, requisitarNacional, fetchInstagram, confiarProxy = false, tokenIntegracao } = {}) {
   // Emissão automática de notas; o agendamento é ligado pelo server.js (app.automacao.iniciar()).
   const automacao = criarAutomacao(db, { fetchNfse, requisitarNacional, log: log ? console.log : () => {} });
   const instagram = criarInstagram(db, { fetch: fetchInstagram, esperarMs: fetchInstagram ? 0 : 2000, log: log ? console.log : () => {} });
-  const router = criarRouter(db, { fetchNfse, requisitarNacional, automacao, instagram });
+  const router = criarRouter(db, { fetchNfse, requisitarNacional, automacao, instagram, tokenIntegracao });
 
   async function app(req, res) {
     const url = new URL(req.url, 'http://localhost');

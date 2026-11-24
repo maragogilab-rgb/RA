@@ -32,6 +32,8 @@ const app = criarApp(db, {
   seguro: process.env.ERP_COOKIE_SEGURO === '1',
   log: process.env.ERP_LOG !== '0',
   confiarProxy: process.env.ERP_PROXY === '1',
+  // Token que o n8n envia no cabeçalho x-erp-token para criar leads vindos do WhatsApp.
+  tokenIntegracao: process.env.ERP_INTEGRACAO_TOKEN || undefined,
 });
 const servidor = http.createServer(app);
 
