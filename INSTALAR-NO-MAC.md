@@ -44,6 +44,18 @@ o contador costuma ter ou indicar onde comprar).
 
 O certificado fica guardado só no seu Mac. O ERP avisa no Painel 30 dias antes de ele vencer.
 
+## WhatsApp da agência ligado ao ERP
+
+Novo contato no WhatsApp vira **lead no ERP**, com tarefa para responder e mensagem de boas-vindas automática.
+Precisa do [Docker Desktop](https://www.docker.com/products/docker-desktop/) (o instalador avisa se faltar). Cole no Terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maragogilab-rgb/RA/HEAD/mac/instalar-whatsapp.sh | bash
+```
+
+No final abre uma página com o **QR Code**: no celular, vá em **WhatsApp → Aparelhos conectados → Conectar um aparelho**.
+Funciona enquanto o Mac estiver ligado e com o Docker aberto. Detalhes em [automacao/WHATSAPP-N8N.md](automacao/WHATSAPP-N8N.md).
+
 ## Esqueci a senha
 
 Abra o Terminal, cole a linha abaixo e aperte **Enter**. Ela mostra os e-mails cadastrados e pede uma senha nova.
