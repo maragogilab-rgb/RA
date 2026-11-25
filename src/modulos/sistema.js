@@ -330,6 +330,13 @@ function registrar(router, db) {
 
     // Lembretes automáticos.
     const lembretes = [];
+    // Pedidos da página pública: responder rápido é o que mais fecha negócio.
+    for (const c of db.prepare(`SELECT id, nome, telefone, origem FROM clientes WHERE pedido_em >= ? AND estagio = 'Novo lead'
+      ORDER BY pedido_em DESC LIMIT 10`).all(v.somarDias(hoje, -14))) {
+      const zap = v.soDigitos(c.telefone || '');
+      lembretes.push({ tipo: 'lead', texto: `Novo pedido de orçamento (${c.origem || 'Site'}): ${c.nome} — responder agora`,
+        link: zap ? `https://wa.me/${zap.length <= 11 ? '55' + zap : zap}` : '#/clientes' });
+    }
     const diasParado = num(empresa.orcamento_parado_dias, 5);
     for (const p of db.prepare(`SELECT p.id, p.titulo, p.data, c.nome AS cliente FROM projetos p JOIN clientes c ON c.id = p.cliente_id
       WHERE p.status = 'proposta' AND p.data <= ? ORDER BY p.data LIMIT 10`).all(v.somarDias(hoje, -diasParado))) {

@@ -26,7 +26,7 @@ const SEGURANCA = {
 
 function criarRouter(db, opcoes) {
   const router = new Router();
-  for (const m of ['sistema', 'cadastros', 'projetos', 'contratos', 'financeiro', 'notas', 'agenda', 'conteudo', 'integracoes']) {
+  for (const m of ['sistema', 'cadastros', 'projetos', 'contratos', 'financeiro', 'notas', 'agenda', 'conteudo', 'integracoes', 'captacao']) {
     require(`./modulos/${m}`).registrar(router, db, opcoes);
   }
   return router;
@@ -38,6 +38,8 @@ function servirEstatico(req, res, caminho) {
     res.writeHead(403, SEGURANCA);
     return res.end('Proibido');
   }
+  // Páginas públicas sem extensão (/pedir-orcamento → pedir-orcamento.html).
+  if (!path.extname(arquivo) && fs.existsSync(arquivo + '.html')) arquivo += '.html';
   // Rotas desconhecidas caem na SPA.
   if (!fs.existsSync(arquivo) || fs.statSync(arquivo).isDirectory()) arquivo = path.join(PUBLICO, 'index.html');
   res.writeHead(200, {
