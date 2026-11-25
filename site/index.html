@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maragogi Lab | Marketing e produção audiovisual em Maceió</title>
+<meta name="description" content="Maragogi Lab: marketing e produção audiovisual em Maceió/AL. Cobertura de eventos em tempo real, reels, foto e vídeo 4K, drone, gestão de redes, gráfica e locação.">
+<meta property="og:title" content="Maragogi Lab — Marketing e Audiovisual">
+<meta property="og:description" content="Câmera e estratégia para marcas que querem ser vistas.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#000000">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700;800&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --preto: #000;
+    --preto-2: #0b0b0b;
+    --branco: #fff;
+    --cinza: #bdb9b3;
+    --cinza-2: #8d8983;
+    --linha: #262626;
+    --rosa: #FF2E93;
+    --ciano: #22D3EE;
+    --mao: 'Caveat', cursive;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--preto); color: var(--branco); font-family: 'Manrope', system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  img, video { display: block; max-width: 100%; }
+  .wrap { padding: 0 clamp(16px, 4vw, 56px); }
+  .caps { text-transform: uppercase; font-weight: 800; letter-spacing: -0.025em; line-height: .95; }
+  .mao { font-family: var(--mao); font-weight: 700; color: var(--rosa); letter-spacing: 0; text-transform: none; }
+  .mini { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--cinza-2); }
+
+  /* Traço à mão (sublinhado e círculo) */
+  .risco { position: relative; white-space: nowrap; }
+  .risco svg { position: absolute; left: -4%; width: 108%; overflow: visible; pointer-events: none; }
+  .risco.sub svg { bottom: -.22em; height: .35em; }
+  .risco.circ svg { top: -18%; height: 136%; }
+  .risco path { fill: none; stroke: var(--rosa); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 600; stroke-dashoffset: 600; transition: stroke-dashoffset 1.2s ease .3s; }
+  .visivel .risco path, .risco.visivel path { stroke-dashoffset: 0; }
+
+  /* Mídia (vídeo/foto ou espaço reservado) */
+  .midia { position: relative; overflow: hidden; background: #111; }
+  .midia > img, .midia > video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .midia.vazia { background:
+      radial-gradient(120% 90% at 20% 10%, rgba(255,46,147,.35), transparent 55%),
+      radial-gradient(90% 80% at 90% 90%, rgba(34,211,238,.28), transparent 55%),
+      linear-gradient(160deg, #161616, #050505); }
+  .midia.vazia::before { content: ""; position: absolute; inset: 0; opacity: .18; mix-blend-mode: overlay;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+  .midia.vazia .etiqueta { position: absolute; left: 18px; bottom: 16px; z-index: 1; }
+
+  /* Topo */
+  header { position: fixed; inset: 0 0 auto; z-index: 80; display: flex; justify-content: space-between; align-items: center; height: 72px; mix-blend-mode: difference; }
+  .logo { font-weight: 800; font-size: 17px; letter-spacing: .12em; display: flex; align-items: center; gap: 9px; }
+  .logo i { width: 11px; height: 11px; border-radius: 50%; background: var(--branco); }
+  .menu-btn { font-weight: 800; font-size: 13px; letter-spacing: .12em; }
+
+  /* Menu em tela cheia */
+  .menu { position: fixed; inset: 0; z-index: 70; background: var(--preto); display: grid; grid-template-columns: 1.4fr 1fr; align-items: end; gap: 40px; padding: 120px clamp(16px, 4vw, 56px) 48px;
+          clip-path: inset(0 0 100% 0); transition: clip-path .6s cubic-bezier(.7,0,.2,1); }
+  .menu.aberto { clip-path: inset(0 0 0 0); }
+  .menu nav a { display: block; font-size: clamp(48px, 9vw, 128px); }
+  .menu nav a:hover { color: var(--rosa); }
+  .menu nav a small { font-size: 14px; vertical-align: top; color: var(--cinza-2); margin-right: 10px; letter-spacing: 0; }
+  .menu .dados { display: grid; gap: 14px; font-size: 18px; color: var(--cinza); }
+  .menu .dados a:hover { color: var(--branco); }
+
+  /* Hero */
+  .hero { height: 100svh; min-height: 560px; position: relative; display: flex; align-items: flex-end; }
+  .hero .midia { position: absolute; inset: 0; }
+  .hero .midia::after { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent 30%, rgba(0,0,0,.75)); }
+  .hero .conteudo { position: relative; z-index: 2; padding-bottom: clamp(40px, 8vh, 90px); }
+  .hero h1 { font-size: clamp(52px, 9.5vw, 150px); }
+  .reel { display: inline-flex; align-items: center; gap: 12px; margin-top: 28px; font-weight: 700; font-size: 15px; }
+  .reel b { width: 40px; height: 40px; border-radius: 50%; background: var(--rosa); display: grid; place-items: center; font-size: 13px; transition: transform .2s; }
+  .reel:hover b { transform: scale(1.12); }
+  .reel u { text-underline-offset: 4px; }
+  .reel span { color: var(--cinza-2); }
+  .seta { position: absolute; right: clamp(16px, 4vw, 56px); bottom: clamp(40px, 8vh, 90px); z-index: 2; font-size: 13px; writing-mode: vertical-rl; letter-spacing: .2em; color: var(--cinza); }
+
+  section { position: relative; }
+
+  /* Manifesto */
+  .manifesto { display: grid; grid-template-columns: 1.2fr 1fr; gap: clamp(32px, 6vw, 90px); align-items: center; padding-top: 140px; padding-bottom: 140px; }
+  .manifesto .mini { margin-bottom: 26px; display: block; }
+  .manifesto p { font-size: clamp(24px, 2.6vw, 38px); font-weight: 300; line-height: 1.22; margin-bottom: 30px; letter-spacing: -0.01em; }
+  .manifesto .midia { aspect-ratio: 4/5; border-radius: 4px; }
+  .pill { display: inline-flex; align-items: center; gap: 14px; border: 1px solid var(--linha); border-radius: 999px; padding: 8px 8px 8px 22px; font-weight: 700; font-size: 15px; transition: border-color .2s; }
+  .pill b { width: 38px; height: 38px; border-radius: 50%; background: var(--rosa); display: grid; place-items: center; transition: transform .2s; }
+  .pill:hover { border-color: var(--rosa); }
+  .pill:hover b { transform: rotate(-45deg); }
+
+  /* Frase à mão sobre faixa de imagem */
+  .frase { height: 70vh; min-height: 420px; display: grid; place-items: center; text-align: center; }
+  .frase .midia { position: absolute; inset: 0; }
+  .frase .midia::after { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+  .frase h2 { position: relative; z-index: 1; font-family: var(--mao); font-weight: 500; font-size: clamp(38px, 5.5vw, 84px); line-height: 1.05; max-width: 16ch; padding: 0 16px; }
+  .frase h2 .risco { color: var(--rosa); font-weight: 700; }
+
+  /* Bloco de impacto */
+  .impacto { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding-top: 160px; padding-bottom: 160px; text-align: center; }
+  .impacto h2 { font-size: clamp(48px, 8vw, 128px); }
+  .impacto .mini:first-child { text-align: left; color: var(--rosa); }
+  .impacto .mini:last-child { text-align: right; color: var(--rosa); }
+
+  /* Letreiro gigante */
+  .letreiro { overflow: hidden; white-space: nowrap; border-top: 1px solid var(--linha); border-bottom: 1px solid var(--linha); padding: 10px 0; }
+  .letreiro div { display: inline-block; font-size: clamp(80px, 15vw, 240px); animation: correr 30s linear infinite; }
+  .letreiro div span:nth-child(even) { -webkit-text-stroke: 2px var(--branco); color: transparent; }
+  @keyframes correr { to { transform: translateX(-50%); } }
+
+  /* Quem somos */
+  .quem { display: grid; grid-template-columns: 1fr 1.1fr; gap: clamp(32px, 6vw, 90px); align-items: center; padding-top: 140px; padding-bottom: 140px; }
+  .quem h2 { font-size: clamp(40px, 5.5vw, 84px); }
+  .quem .mao { font-size: clamp(24px, 2.4vw, 34px); display: block; margin: 14px 0 26px; }
+  .quem p { color: var(--cinza); font-size: 17px; line-height: 1.65; margin-bottom: 30px; max-width: 54ch; }
+  .quem .foto { position: relative; }
+  .quem .midia { aspect-ratio: 5/4; filter: grayscale(1); border-radius: 4px; }
+  .quem .grande { position: absolute; left: -0.08em; bottom: -0.32em; font-size: clamp(90px, 13vw, 200px); line-height: 1; z-index: 2; }
+
+  /* Serviços em lista gigante */
+  .servicos { padding-top: 140px; padding-bottom: 160px; text-align: center; }
+  .servicos .mini { display: block; margin-bottom: 40px; }
+  .servicos ol { list-style: none; }
+  .servicos li { font-size: clamp(30px, 5.4vw, 78px); padding: .04em 0; transition: color .25s; cursor: default; }
+  .servicos li sup { font-size: 13px; color: var(--cinza-2); font-weight: 500; vertical-align: top; margin-right: 10px; letter-spacing: 0; }
+  .servicos li:hover { color: var(--rosa); }
+  .servicos .descricao { max-width: 560px; margin: 50px auto 0; color: var(--cinza); font-size: 17px; line-height: 1.6; }
+
+  /* Audiovisual */
+  .audiovisual { text-align: center; padding-top: 80px; padding-bottom: 140px; }
+  .audiovisual .mao { font-size: 30px; display: block; margin-bottom: 10px; }
+  .audiovisual h2 { font-size: clamp(38px, 6vw, 92px); max-width: 15ch; margin: 0 auto 26px; }
+  .audiovisual > p { color: var(--cinza); max-width: 620px; margin: 0 auto 60px; font-size: 17px; line-height: 1.6; }
+  .audiovisual .midia { aspect-ratio: 21/9; border-radius: 4px; margin-bottom: 50px; }
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--linha); border: 1px solid var(--linha); text-align: left; }
+  .card { background: var(--preto); padding: 34px 28px; }
+  .card b { color: var(--rosa); font-size: 13px; }
+  .card h3 { font-size: 22px; font-weight: 800; margin: 14px 0 10px; line-height: 1.15; }
+  .card p { color: var(--cinza); font-size: 15px; line-height: 1.55; }
+
+  /* Cases */
+  .cases { padding-top: 120px; padding-bottom: 140px; }
+  .cases .topo { display: flex; justify-content: space-between; align-items: end; gap: 20px; flex-wrap: wrap; margin-bottom: 40px; }
+  .cases h2 { font-size: clamp(56px, 10vw, 160px); }
+  .filtros { display: flex; gap: 8px; flex-wrap: wrap; }
+  .filtros button { border: 1px solid var(--linha); border-radius: 999px; padding: 10px 18px; font-weight: 700; font-size: 14px; color: var(--cinza); transition: all .2s; }
+  .filtros button.ativo, .filtros button:hover { border-color: var(--rosa); color: var(--branco); }
+  .filtros button.ativo { background: var(--rosa); }
+  .grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .case { display: block; }
+  .case .midia { aspect-ratio: 4/5; border-radius: 4px; }
+  .case .midia > * { transition: transform .6s; }
+  .case:hover .midia > img, .case:hover .midia > video { transform: scale(1.05); }
+  .case h3 { font-size: 20px; font-weight: 800; margin-top: 14px; }
+  .case h3::before { content: "→ "; color: var(--rosa); }
+  .case p { color: var(--cinza-2); font-size: 14px; margin-top: 4px; }
+  .case.escondido { display: none; }
+  .ver-mais { text-align: center; margin-top: 50px; }
+
+  /* Depoimentos */
+  .depoimentos { padding-top: 120px; padding-bottom: 140px; border-top: 1px solid var(--linha); }
+  .depoimentos h2 { font-size: clamp(40px, 6.5vw, 100px); margin: 18px 0 60px; }
+  .depoimentos h2 .mao { font-size: .8em; }
+  .falas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .falas blockquote { border: 1px solid var(--linha); border-radius: 4px; padding: clamp(24px, 3vw, 40px); display: flex; flex-direction: column; justify-content: space-between; gap: 30px; }
+  .falas p { font-size: clamp(20px, 2vw, 26px); font-weight: 300; line-height: 1.35; }
+  .falas cite { font-style: normal; color: var(--cinza-2); font-size: 14px; }
+  .falas cite b { display: block; color: var(--branco); font-size: 16px; margin-bottom: 4px; }
+  @media (max-width: 900px) { .falas { grid-template-columns: 1fr; } }
+
+  /* Contato */
+  .contato { padding-top: 140px; padding-bottom: 140px; border-top: 1px solid var(--linha); }
+  .contato h2 { font-size: clamp(56px, 10vw, 160px); margin-bottom: 60px; }
+  .contato h2 .mao { font-size: .62em; display: inline-block; transform: rotate(-3deg); }
+  .opcoes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .opcao { border: 1px solid var(--linha); border-radius: 4px; padding: 36px; display: flex; flex-direction: column; gap: 10px; transition: border-color .2s, background .2s; }
+  .opcao:hover { border-color: var(--rosa); background: var(--preto-2); }
+  .opcao h3 { font-size: 26px; font-weight: 800; }
+  .opcao p { color: var(--cinza); line-height: 1.55; }
+  .opcao span { margin-top: 14px; font-weight: 800; color: var(--rosa); }
+  form { border: 1px solid var(--linha); border-radius: 4px; padding: clamp(24px, 4vw, 48px); display: grid; grid-template-columns: 1fr 1fr; gap: 26px 30px; }
+  form label { display: grid; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--cinza-2); }
+  form .cheio { grid-column: 1 / -1; }
+  input, select, textarea { font: inherit; font-size: 18px; letter-spacing: 0; text-transform: none; color: var(--branco); background: transparent; border: 0; border-bottom: 1px solid var(--linha); padding: 10px 0; border-radius: 0; }
+  select option { background: #111; }
+  input:focus, select:focus, textarea:focus { outline: none; border-bottom-color: var(--rosa); }
+  textarea { min-height: 90px; resize: vertical; }
+  form .enviar { grid-column: 1 / -1; justify-self: start; }
+
+  /* Rodapé */
+  footer.wrap { border-top: 1px solid var(--linha); padding-top: 70px; padding-bottom: 36px; }
+  .rodape { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 40px; margin-bottom: 80px; }
+  .rodape h4 { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--cinza-2); margin-bottom: 16px; }
+  .rodape a, .rodape p { display: block; color: var(--cinza); line-height: 1.9; font-size: 16px; }
+  .rodape a:hover { color: var(--rosa); }
+  .marca-final { font-size: clamp(48px, 13vw, 210px); line-height: .85; margin-bottom: 30px; }
+  .base { display: flex; justify-content: space-between; color: var(--cinza-2); font-size: 13px; gap: 20px; flex-wrap: wrap; }
+  .base a:hover { color: var(--branco); }
+
+  .zap { position: fixed; right: 18px; bottom: 18px; z-index: 60; width: 56px; height: 56px; border-radius: 50%; background: #25D366; display: grid; place-items: center; box-shadow: 0 10px 30px rgba(0,0,0,.4); transition: transform .15s; }
+  .zap:hover { transform: scale(1.08); }
+
+  /* Reel em tela cheia */
+  .player { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.94); display: none; place-items: center; padding: 20px; }
+  .player.aberto { display: grid; }
+  .player video { width: min(1200px, 100%); max-height: 85vh; }
+  .player button { position: absolute; top: 20px; right: 24px; font-weight: 800; letter-spacing: .12em; font-size: 13px; }
+  .player p { color: var(--cinza); text-align: center; max-width: 420px; line-height: 1.6; }
+
+  .surgir { opacity: 0; transform: translateY(40px); transition: opacity .9s, transform .9s cubic-bezier(.2,.7,.2,1); }
+  .surgir.visivel { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .surgir { opacity: 1; transform: none; } .letreiro div { animation: none; } html { scroll-behavior: auto; } .risco path { stroke-dashoffset: 0; }
+  }
+
+  @media (max-width: 900px) {
+    .manifesto, .quem, .menu { grid-template-columns: 1fr; }
+    .cards { grid-template-columns: 1fr 1fr; }
+    .grade { grid-template-columns: 1fr 1fr; }
+    .rodape { grid-template-columns: 1fr 1fr; }
+    .impacto { grid-template-columns: 1fr; gap: 24px; }
+    .impacto .mini:first-child, .impacto .mini:last-child { text-align: center; }
+    .quem .foto { margin-bottom: 40px; }
+  }
+  @media (max-width: 600px) {
+    .manifesto, .quem, .servicos, .cases, .contato, .impacto { padding-top: 90px; padding-bottom: 90px; }
+    .cards, .grade, .opcoes, form, .rodape { grid-template-columns: 1fr; }
+    .seta { display: none; }
+    .menu .dados { font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <a href="#inicio" class="logo"><i></i>MARAGOGI LAB</a>
+  <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="menu">MENU+</button>
+</header>
+
+<div class="menu" id="menu" aria-hidden="true">
+  <nav>
+    <a class="caps" href="#inicio"><small>01</small>Home</a>
+    <a class="caps" href="#servicos"><small>02</small>Serviços</a>
+    <a class="caps" href="#cases"><small>03</small>Projetos</a>
+    <a class="caps" href="#contato"><small>04</small>Contato</a>
+  </nav>
+  <div class="dados">
+    <span class="mini">Fale com a gente</span>
+    <a class="link-email" href="#"></a>
+    <a class="link-zap" href="#" target="_blank" rel="noopener">WhatsApp</a>
+    <a href="https://instagram.com/maragogilab" target="_blank" rel="noopener">Instagram @maragogilab</a>
+  </div>
+</div>
+
+<main>
+  <!-- HERO: para colocar o seu reel de fundo, salve o vídeo como site/img/reel.mp4 (curto, sem som, até ~10 MB) -->
+  <section class="hero" id="inicio">
+    <div class="midia vazia" id="fundoHero" data-video="img/reel.mp4" data-poster="img/capa.jpg"></div>
+    <div class="conteudo wrap">
+      <span class="mini surgir" style="color:var(--rosa);display:block;margin-bottom:18px">Marketing e audiovisual · Maceió/AL</span>
+      <h1 class="caps surgir">Vídeo /<br>Marketing /<br>Resultado</h1>
+      <button class="reel surgir" id="abrirReel"><b>▶</b><u>Assistir reel</u></button>
+    </div>
+    <span class="seta">ROLE ↓</span>
+  </section>
+
+  <section class="manifesto wrap">
+    <div class="surgir">
+      <span class="mini">#MaragogiLab</span>
+      <p>A gente transforma câmera e estratégia em <span class="risco sub">clientes novos.<svg viewBox="0 0 200 12" preserveAspectRatio="none"><path d="M2 8 C 50 2, 120 12, 198 5"/></svg></span></p>
+      <p>Cobertura em tempo real, foto e vídeo 4K, drone e gestão de redes. Seu evento postado enquanto acontece.</p>
+      <p>Bora tirar a sua ideia do <span class="risco circ">papel<svg viewBox="0 0 200 80" preserveAspectRatio="none"><path d="M30 12 C 120 -6, 205 18, 190 48 C 176 78, 40 82, 10 52 C -8 30, 40 8, 110 10"/></svg></span>?</p>
+      <a href="#contato" class="pill">Fale conosco <b>→</b></a>
+    </div>
+    <!-- Foto da equipe: site/img/equipe.jpg -->
+    <div class="midia vazia surgir" data-img="img/equipe.jpg"><span class="etiqueta mini">Foto da equipe</span></div>
+  </section>
+
+  <section class="frase">
+    <!-- Foto de bastidor: site/img/bastidor.jpg -->
+    <div class="midia vazia" data-img="img/bastidor.jpg"></div>
+    <h2 class="surgir">Toda marca tem uma <span class="risco sub">história<svg viewBox="0 0 200 12" preserveAspectRatio="none"><path d="M2 7 C 60 12, 140 1, 198 6"/></svg></span> que merece ser vista.</h2>
+  </section>
+
+  <section class="impacto wrap">
+    <span class="mini">Vídeo /<br>Marketing / Resultado</span>
+    <h2 class="caps surgir">Câmera.<br>Estratégia.<br>Resultado.</h2>
+    <span class="mini">Maragogi Lab<br>©<span class="ano"></span></span>
+  </section>
+
+  <div class="letreiro" aria-hidden="true">
+    <div class="caps"><span>Vídeo / </span><span>Foto / </span><span>Drone / </span><span>Social / </span><span>Vídeo / </span><span>Foto / </span><span>Drone / </span><span>Social / </span></div>
+  </div>
+
+  <section class="quem wrap">
+    <div class="foto surgir">
+      <!-- Foto de set / gravação: site/img/set.jpg -->
+      <div class="midia vazia" data-img="img/set.jpg"><span class="etiqueta mini" style="top:16px;bottom:auto">Foto de gravação</span></div>
+      <span class="grande caps">Lab</span>
+    </div>
+    <div class="surgir">
+      <h2 class="caps">Somos um<br>laboratório criativo</h2>
+      <span class="mao">audiovisual, redes, gráfica e locação.</span>
+      <p>A Maragogi Lab é uma equipe local de Maceió que cuida de tudo o que o seu evento ou a sua marca precisa: da captação com câmeras Sony e drone à edição, das redes sociais à impressão e à decoração. Um parceiro só, do começo ao fim.</p>
+      <a href="#contato" class="pill">Orçar um projeto <b>→</b></a>
+    </div>
+  </section>
+
+  <section class="servicos wrap" id="servicos">
+    <span class="mini">O que fazemos</span>
+    <ol class="caps">
+      <li class="surgir"><sup>01</sup>Cobertura em tempo real</li>
+      <li class="surgir"><sup>02</sup>Reels e vídeos curtos</li>
+      <li class="surgir"><sup>03</sup>Casamentos e eventos</li>
+      <li class="surgir"><sup>04</sup>Imagens aéreas com drone</li>
+      <li class="surgir"><sup>05</sup>Foto e vídeo institucional</li>
+      <li class="surgir"><sup>06</sup>Gestão de redes sociais</li>
+      <li class="surgir"><sup>07</sup>Tráfego pago</li>
+      <li class="surgir"><sup>08</sup>Gráfica</li>
+      <li class="surgir"><sup>09</sup>Locação para festas</li>
+    </ol>
+    <p class="descricao surgir">Da captação à impressão, passando pela decoração. Adesivos, placas, banners e convites na gráfica; brinquedos, mesas, cadeiras e decoração na locação.</p>
+  </section>
+
+  <section class="audiovisual wrap">
+    <span class="mao surgir">Nosso forte</span>
+    <h2 class="caps surgir">Produção audiovisual do começo ao fim.</h2>
+    <p class="surgir">Equipe local, câmeras Sony, drone e edição ágil. Stories, reels e fotos publicados durante o evento, para quem não pôde ir acompanhar tudo na hora.</p>
+    <!-- Foto ou vídeo largo: site/img/producao.jpg -->
+    <div class="midia vazia surgir" data-img="img/producao.jpg"><span class="etiqueta mini">Bastidores</span></div>
+    <div class="cards">
+      <div class="card surgir"><b>01</b><h3>Tempo real</h3><p>Stories, reels e fotos postados enquanto o evento acontece.</p></div>
+      <div class="card surgir"><b>02</b><h3>Casamentos</h3><p>Da cerimônia ao aftermovie, com entrega ágil.</p></div>
+      <div class="card surgir"><b>03</b><h3>Drone e aéreas</h3><p>Imagens aéreas para turismo, imóveis, pousadas e eventos.</p></div>
+      <div class="card surgir"><b>04</b><h3>Corporativo</h3><p>Eventos, shows e institucionais com alto padrão de imagem.</p></div>
+    </div>
+  </section>
+
+  <section class="cases wrap" id="cases">
+    <div class="topo">
+      <h2 class="caps surgir">Cases</h2>
+      <div class="filtros" id="filtros">
+        <button class="ativo" data-filtro="todos">Todos</button>
+        <button data-filtro="audiovisual">Eventos</button>
+        <button data-filtro="social">Reels</button>
+        <button data-filtro="foto">Casamentos</button>
+      </div>
+    </div>
+    <!-- Para cada case: coloque a foto em site/img (ex.: img/case1.jpg) e, se quiser, troque título e legenda -->
+    <div class="grade">
+      <a class="case surgir" data-tipo="foto" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case1.jpg"></div><h3>Casamentos</h3><p>Cerimônia e festa</p></a>
+      <a class="case surgir" data-tipo="audiovisual" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case2.jpg"></div><h3>Eventos</h3><p>Cobertura ao vivo</p></a>
+      <a class="case surgir" data-tipo="social" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case3.jpg"></div><h3>Marcas</h3><p>Reels</p></a>
+      <a class="case surgir" data-tipo="audiovisual" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case4.jpg"></div><h3>Corporativo</h3><p>Eventos e institucionais</p></a>
+      <a class="case surgir" data-tipo="audiovisual" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case5.jpg"></div><h3>Drone</h3><p>Imagens aéreas</p></a>
+      <a class="case surgir" data-tipo="audiovisual" href="https://instagram.com/maragogilab" target="_blank" rel="noopener"><div class="midia vazia" data-img="img/case6.jpg"></div><h3>Festas</h3><p>Locação e decoração</p></a>
+    </div>
+    <div class="ver-mais"><a class="pill" href="https://instagram.com/maragogilab" target="_blank" rel="noopener">Ver mais no Instagram <b>→</b></a></div>
+  </section>
+
+  <section class="depoimentos wrap">
+    <span class="mini surgir">Depoimentos</span>
+    <h2 class="caps surgir">Quem contratou, <span class="mao">recomenda.</span></h2>
+    <div class="falas">
+      <blockquote class="surgir"><p>“Confiamos na Maragogi Lab e não nos arrependemos. Entrega rápida e qualidade impecável!”</p><cite><b>André Assessoria</b>Cobertura de evento corporativo</cite></blockquote>
+      <blockquote class="surgir"><p>“Pontualidade impecável, prazos respeitados e horários rigorosos. Acompanhamento em tempo real e sempre superando expectativas. A Maragogi Lab é nosso parceiro ideal!”</p><cite><b>Rosa Amélia</b>Gerente, Banco do Brasil · Cobertura de evento corporativo</cite></blockquote>
+    </div>
+  </section>
+
+  <section class="contato wrap" id="contato">
+    <h2 class="caps surgir">Vamos criar<br><span class="mao">a sua próxima</span> história?</h2>
+    <div class="opcoes">
+      <a class="opcao surgir link-zap" href="#" target="_blank" rel="noopener">
+        <h3>Falar no WhatsApp</h3>
+        <p>Fale direto com a gente e tire suas dúvidas na hora.</p>
+        <span>Chamar no WhatsApp →</span>
+      </a>
+      <a class="opcao surgir" href="#formulario">
+        <h3>Mandar pelo formulário</h3>
+        <p>Conte data, tipo de evento e objetivo. A mensagem chega pronta no nosso WhatsApp.</p>
+        <span>Preencher formulário ↓</span>
+      </a>
+    </div>
+    <form id="formulario" class="surgir">
+      <label>Nome<input name="nome" required autocomplete="name"></label>
+      <label>Empresa<input name="empresa" autocomplete="organization"></label>
+      <label>WhatsApp<input name="telefone" type="tel" autocomplete="tel"></label>
+      <label>Serviço
+        <select name="servico">
+          <option>Cobertura de evento em tempo real</option>
+          <option>Casamento</option>
+          <option>Reels / vídeos curtos</option>
+          <option>Imagens com drone</option>
+          <option>Foto e vídeo institucional</option>
+          <option>Gestão de redes sociais</option>
+          <option>Tráfego pago</option>
+          <option>Gráfica</option>
+          <option>Locação para festas</option>
+          <option>Ainda não sei</option>
+        </select>
+      </label>
+      <label class="cheio">Mensagem<textarea name="mensagem" placeholder="Data, local, objetivo..."></textarea></label>
+      <button class="pill enviar" type="submit">Enviar <b>→</b></button>
+    </form>
+  </section>
+</main>
+
+<footer class="wrap">
+  <div class="rodape">
+    <div>
+      <h4>Maragogi Lab</h4>
+      <p>Rua Santo Antônio, Q A, Nº 5<br>Tabuleiro dos Martins, Maceió/AL</p>
+      <a class="link-email" href="#"></a>
+      <a class="link-zap tel" href="#" target="_blank" rel="noopener"></a>
+    </div>
+    <div>
+      <h4>Navegação</h4>
+      <a href="#inicio">Home</a><a href="#servicos">Serviços</a><a href="#cases">Projetos</a><a href="#contato">Contato</a>
+    </div>
+    <div>
+      <h4>Redes</h4>
+      <a href="https://instagram.com/maragogilab" target="_blank" rel="noopener">→ Instagram</a>
+      <a class="link-zap" href="#" target="_blank" rel="noopener">→ WhatsApp</a>
+    </div>
+  </div>
+  <div class="marca-final caps">Maragogi Lab</div>
+  <div class="base"><span>Maragogi Lab ©<span class="ano"></span> · Maceió/AL · Marketing · Audiovisual · Gráfica · Locação</span><a href="#inicio">Voltar ao topo ↑</a></div>
+</footer>
+
+<a class="zap link-zap" href="#" target="_blank" rel="noopener" aria-label="Falar no WhatsApp">
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M17.5 14.4c-.3-.1-1.8-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6l.4-.5c.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.1.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2z"/></svg>
+</a>
+
+<div class="player" id="player" role="dialog" aria-label="Reel">
+  <button id="fecharReel">FECHAR ✕</button>
+  <div id="palco"></div>
+</div>
+
+<script>
+  // ===== Ajuste aqui os seus contatos =====
+  const WHATSAPP = '5582987184800';           // DDI + DDD + número, só dígitos
+  const EMAIL = 'maragogilab@gmail.com';
+  const REEL = 'img/reel.mp4';                 // vídeo do botão "Assistir reel"
+  // ========================================
+
+  const zap = (t) => 'https://wa.me/' + WHATSAPP + (t ? '?text=' + encodeURIComponent(t) : '');
+  const n = WHATSAPP.replace(/^55/, '');
+  const telefone = '(' + n.slice(0, 2) + ') ' + n.slice(2, -4) + '-' + n.slice(-4);
+  document.querySelectorAll('.link-zap').forEach(a => a.href = zap('Olá, Maragogi Lab! Vim pelo site e quero um orçamento.'));
+  document.querySelectorAll('.link-zap.tel').forEach(a => a.textContent = 'WhatsApp ' + telefone);
+  document.querySelectorAll('.link-email').forEach(a => { a.href = 'mailto:' + EMAIL; a.textContent = EMAIL; });
+  document.querySelectorAll('.ano').forEach(s => s.textContent = new Date().getFullYear());
+
+  // Fotos e vídeos: só aparecem se o arquivo existir; senão fica o fundo da marca.
+  document.querySelectorAll('.midia[data-img]').forEach(box => {
+    const img = new Image();
+    img.onload = () => { img.alt = ''; box.classList.remove('vazia'); box.querySelector('.etiqueta')?.remove(); box.prepend(img); };
+    img.src = box.dataset.img;
+  });
+  const hero = document.getElementById('fundoHero');
+  const v = document.createElement('video');
+  Object.assign(v, { muted: true, loop: true, autoplay: true, playsInline: true, src: hero.dataset.video });
+  v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
+  v.addEventListener('loadeddata', () => { hero.classList.remove('vazia'); hero.prepend(v); v.play().catch(() => {}); });
+  v.load();
+
+  // Menu
+  const menu = document.getElementById('menu'), menuBtn = document.getElementById('menuBtn');
+  const alternar = (abrir) => {
+    menu.classList.toggle('aberto', abrir);
+    menu.setAttribute('aria-hidden', !abrir);
+    menuBtn.setAttribute('aria-expanded', abrir);
+    menuBtn.textContent = abrir ? 'FECHAR ✕' : 'MENU+';
+    document.body.style.overflow = abrir ? 'hidden' : '';
+  };
+  menuBtn.addEventListener('click', () => alternar(!menu.classList.contains('aberto')));
+  menu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => alternar(false)));
+
+  // Reel
+  const player = document.getElementById('player'), palco = document.getElementById('palco');
+  document.getElementById('abrirReel').addEventListener('click', () => {
+    palco.innerHTML = '';
+    const r = document.createElement('video');
+    r.controls = true; r.autoplay = true; r.playsInline = true; r.src = REEL;
+    r.onerror = () => { palco.innerHTML = '<p>Reel em breve. Enquanto isso, veja nossos trabalhos no <a href="https://instagram.com/maragogilab" target="_blank" rel="noopener" style="color:var(--rosa)">@maragogilab</a>.</p>'; };
+    palco.append(r);
+    player.classList.add('aberto');
+  });
+  const fechar = () => { player.classList.remove('aberto'); palco.innerHTML = ''; };
+  document.getElementById('fecharReel').addEventListener('click', fechar);
+  addEventListener('keydown', e => { if (e.key === 'Escape') { fechar(); alternar(false); } });
+
+  // Filtro de cases
+  document.getElementById('filtros').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    document.querySelectorAll('#filtros button').forEach(x => x.classList.toggle('ativo', x === b));
+    document.querySelectorAll('.case').forEach(c => c.classList.toggle('escondido', b.dataset.filtro !== 'todos' && c.dataset.tipo !== b.dataset.filtro));
+  });
+
+  // Formulário -> WhatsApp
+  document.getElementById('formulario').addEventListener('submit', e => {
+    e.preventDefault();
+    const d = new FormData(e.target);
+    const linhas = ['Olá, Maragogi Lab! Vim pelo site.', 'Nome: ' + d.get('nome'),
+      d.get('empresa') && 'Empresa: ' + d.get('empresa'), d.get('telefone') && 'WhatsApp: ' + d.get('telefone'),
+      'Serviço: ' + d.get('servico'), d.get('mensagem') && 'Projeto: ' + d.get('mensagem')].filter(Boolean);
+    window.open(zap(linhas.join('\n')), '_blank', 'noopener');
+  });
+
+  // Animação ao rolar
+  const obs = new IntersectionObserver(itens => itens.forEach(i => {
+    if (i.isIntersecting) { i.target.classList.add('visivel'); obs.unobserve(i.target); }
+  }), { threshold: 0.15 });
+  document.querySelectorAll('.surgir, .risco').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>
