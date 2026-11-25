@@ -437,6 +437,7 @@ export async function configuracoes(raiz) {
   }
 
   if (admin) secoes.push(await secaoGestao());
+  if (admin) secoes.push(await secaoWhatsapp());
   if (admin) secoes.push(secaoImportar());
   trocar(raiz, cabecalho('Configurações'), ...secoes);
 }
@@ -477,6 +478,42 @@ async function secaoGestao() {
         for (const k of Object.keys(d)) if (d[k] === null) d[k] = '';
         estado.empresa = await PUT('/empresa', { ...d, metas_area: JSON.stringify(metas) });
         aviso('Configurações salvas');
+      } catch (err) { aviso(err.message, 'erro'); }
+    }, 'btn-primario'));
+}
+
+// Robô de atendimento do WhatsApp: menu de opções e perguntas do orçamento.
+async function secaoWhatsapp() {
+  const p = await GET('/integracoes/whatsapp/padroes');
+  const e = estado.empresa || {};
+  const valores = Object.fromEntries(Object.keys(p).filter((k) => k.startsWith('bot_')).map((k) => [k, e[k] || p[k]]));
+  const form = formulario([
+    { nome: 'bot_modo', rotulo: 'Resposta automática', tipo: 'select', largura: 'cheio', opcoes: [
+      ['menu', 'Robô com menu (orçamento, portfólio, falar com a equipe)'],
+      ['boas_vindas', 'Só a mensagem de boas-vindas no 1º contato'],
+      ['desligado', 'Desligada (só cadastra o lead)']] },
+    { nome: 'bot_boas_vindas', rotulo: 'Boas-vindas', tipo: 'textarea', largura: 'cheio',
+      ajuda: '{nome} vira o primeiro nome do contato. No modo robô, o menu vem logo abaixo.' },
+    { nome: 'bot_portfolio', rotulo: 'Mensagem do portfólio (opção "Ver nossos trabalhos")', tipo: 'textarea', largura: 'cheio',
+      ajuda: 'Coloque o link do Instagram, site ou portfólio. Em branco, a opção não aparece no menu.' },
+    { nome: 'bot_servicos', rotulo: 'Serviços para escolher no orçamento (um por linha)', tipo: 'textarea', largura: 'cheio' },
+    { nome: 'bot_perguntas', rotulo: 'Perguntas do orçamento (uma por linha, feitas em ordem)', tipo: 'textarea', largura: 'cheio' },
+    { nome: 'bot_fim', rotulo: 'Mensagem ao terminar o pedido de orçamento', tipo: 'textarea', largura: 'cheio' },
+    { nome: 'bot_humano', rotulo: 'Mensagem ao passar para a equipe', tipo: 'textarea', largura: 'cheio' },
+  ], valores);
+  form.els.bot_servicos.rows = 5;
+  form.els.bot_perguntas.rows = 4;
+  return h('section', { class: 'cartao' },
+    h('h2', { class: 'secao' }, 'WhatsApp: atendimento automático'),
+    p.integracao_ligada ? null : h('div', { class: 'faixa faixa-info' }, 'A integração com o WhatsApp ainda não está ligada neste ERP. Veja o passo a passo em automacao/WHATSAPP-N8N.md.'),
+    h('p', { class: 'mudo' }, 'Quem chama pela primeira vez vira lead e recebe o menu. O pedido de orçamento fica anotado no cliente e vira tarefa para você. ',
+      'Quando alguém da equipe responde pelo celular, o robô sai da conversa. O contato volta ao menu mandando "menu". ',
+      'Clientes já cadastrados não recebem o robô.'),
+    form.el,
+    btn('Salvar', async () => {
+      try {
+        estado.empresa = await PUT('/empresa', form.ler());
+        aviso('Atendimento do WhatsApp salvo');
       } catch (err) { aviso(err.message, 'erro'); }
     }, 'btn-primario'));
 }

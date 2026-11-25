@@ -27,8 +27,9 @@ Funciona no computador e no celular, com tema claro e escuro.
 
 ## WhatsApp e automações
 
-Novo contato no WhatsApp vira **lead no ERP** com tarefa para responder e recebe **boas-vindas automáticas**,
-usando n8n + Evolution API. Passo a passo em [automacao/WHATSAPP-N8N.md](automacao/WHATSAPP-N8N.md).
+Novo contato no WhatsApp vira **lead no ERP** com tarefa para responder e é atendido por um **robô com menu**
+(pedir orçamento, ver trabalhos, já sou cliente, falar com a equipe), sem custo, usando n8n + Evolution API.
+O pedido de orçamento chega anotado no cliente. Textos e perguntas em *Configurações → WhatsApp*. Passo a passo em [automacao/WHATSAPP-N8N.md](automacao/WHATSAPP-N8N.md).
 
 ## Skills de marketing para o Claude
 

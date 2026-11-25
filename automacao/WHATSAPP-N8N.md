@@ -4,19 +4,43 @@ Quando alguém chama a Maragogi Lab no WhatsApp **pela primeira vez**:
 
 1. O contato vira **lead no ERP** (Clientes → relação "lead", estágio "Novo lead", origem "WhatsApp"), com a primeira mensagem nas observações.
 2. Uma **tarefa de prioridade alta** "Responder novo lead" aparece para hoje no painel.
-3. O cliente recebe na hora uma **mensagem de boas-vindas** automática.
-
-Quem já está cadastrado (mesmo com o número escrito de outro jeito) **não é duplicado** e **não recebe a mensagem automática de novo**.
-Mensagens de grupos, de status e as enviadas pela própria agência são ignoradas.
+3. O **robô de atendimento** responde na hora com as boas-vindas e um menu:
 
 ```
-WhatsApp → Evolution API → n8n → ERP (lead + tarefa)
-                              └→ Evolution API → resposta automática (só no 1º contato)
+Oi, Ana! 👋 Aqui é da Maragogi Lab. Que bom ter você por aqui!
+
+Como posso te ajudar? Responda com o número:
+
+*1* - Pedir um orçamento
+*2* - Ver nossos trabalhos
+*3* - Já sou cliente
+*4* - Falar com a equipe
+```
+
+- **1 - Orçamento:** pergunta o serviço e depois as perguntas que você definir (data, local, o que a pessoa imagina…).
+  As respostas ficam anotadas no cliente e a tarefa vira "Enviar orçamento (WhatsApp): Ana — Fotografia".
+- **2 - Trabalhos:** manda o link do portfólio. Só aparece se você preencher a mensagem do portfólio.
+- **3 - Já sou cliente:** pede que a pessoa conte o que precisa e passa para a equipe.
+- **4 - Falar com a equipe:** avisa a equipe com uma tarefa e o robô fica quieto.
+
+O robô **sai da conversa** quando alguém da agência responde pelo celular, quando passa para a equipe ou depois de
+3 respostas que ele não entende. O contato volta ao menu mandando **menu** (ou sozinho, se a conversa ficar parada mais de 30 dias).
+
+Quem já estava cadastrado no ERP (mesmo com o número escrito de outro jeito) **não é duplicado** e **não recebe o robô**.
+Mensagens de grupos e de status são ignoradas. Não tem custo: o robô não usa IA, segue o menu.
+
+**Textos, serviços e perguntas** ficam em **Configurações → WhatsApp: atendimento automático**. Lá também dá para deixar
+só a mensagem de boas-vindas ou desligar as respostas automáticas.
+
+```
+WhatsApp → Evolution API → n8n → ERP (lead, tarefa e próxima resposta do robô)
+                              └→ Evolution API → resposta no WhatsApp
 ```
 
 ## Jeito mais fácil: no Mac, com um comando
 
-Cole no Terminal (atualiza o ERP, liga a integração, sobe tudo e abre o QR Code):
+Cole no Terminal (atualiza o ERP, liga a integração, sobe tudo e abre o QR Code). Para **atualizar** uma instalação
+antiga, rode o mesmo comando: ele troca o fluxo do n8n pelo novo sem mexer no WhatsApp conectado.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/maragogilab-rgb/RA/HEAD/mac/instalar-whatsapp.sh | bash
@@ -87,13 +111,10 @@ WhatsApp da agência (**WhatsApp → Aparelhos conectados → Conectar um aparel
 
 Pronto: mande um "oi" de outro número e confira o lead e a tarefa no ERP.
 
-## Mudar a mensagem automática
+## Mudar as mensagens do robô
 
-No `.env`, preencha `MENSAGEM_BOAS_VINDAS` (`{nome}` vira o primeiro nome do contato) e rode `docker compose up -d` de novo. Exemplo:
-
-```
-MENSAGEM_BOAS_VINDAS=Oi, {nome}! Aqui é o Rafael, da Maragogi Lab. Já vi sua mensagem e te respondo em instantes.
-```
+No ERP: **Configurações → WhatsApp: atendimento automático**. Não precisa mexer no n8n nem reiniciar nada.
+(A variável `MENSAGEM_BOAS_VINDAS` do `.env` não é mais usada.)
 
 ## Cuidados
 
@@ -109,7 +130,12 @@ MENSAGEM_BOAS_VINDAS=Oi, {nome}! Aqui é o Rafael, da Maragogi Lab. Já vi sua m
 
 ## Detalhes técnicos
 
-Rota do ERP: `POST /api/integracoes/lead`, cabeçalho `x-erp-token`, corpo JSON
+Rota do robô: `POST /api/integracoes/whatsapp`, cabeçalho `x-erp-token`, corpo JSON
+`{ "telefone": "558299991234", "nome": "Ana", "mensagem": "oi", "de_mim": false }`. Responde `{ resposta, novo, cliente_id }`:
+`resposta` é o texto a enviar ou `null` para não responder. Com `de_mim: true` (mensagem enviada pelo WhatsApp da agência)
+o robô sai da conversa, a não ser que seja o próprio texto que ele acabou de mandar. As conversas ficam na tabela `whatsapp_conversas`.
+
+Rota só de cadastro: `POST /api/integracoes/lead`, cabeçalho `x-erp-token`, corpo JSON
 `{ "telefone": "5582999991234", "nome": "Ana", "mensagem": "...", "origem": "WhatsApp" }`.
 Responde `201 { novo: true, cliente, tarefa_id }` no primeiro contato e `200 { novo: false, cliente }` quando o número já existe.
 O número é comparado por DDD + 8 últimos dígitos, então `+55 (82) 9 9999-1234`, `82999991234` e `558299991234` são o mesmo contato.

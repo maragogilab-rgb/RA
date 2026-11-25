@@ -1,5 +1,5 @@
 {
-  "name": "WhatsApp → lead no ERP + boas-vindas",
+  "name": "WhatsApp → robô de atendimento do ERP",
   "nodes": [
     {
       "id": "a1",
@@ -28,12 +28,12 @@
         0
       ],
       "parameters": {
-        "jsCode": "// Lê o aviso do Evolution API e descarta o que não é mensagem nova de uma pessoa.\nconst esperado = $env.WEBHOOK_TOKEN;\nconst saida = [];\nfor (const item of $input.all()) {\n  const headers = item.json.headers || {};\n  if (!esperado || headers['x-webhook-token'] !== esperado) continue; // não veio do nosso Evolution\n  const b = item.json.body || {};\n  if (b.event !== 'messages.upsert') continue;\n  const d = Array.isArray(b.data) ? b.data[0] : b.data;\n  const k = (d && d.key) || {};\n  if (k.fromMe) continue; // mensagens enviadas pela própria agência\n  let jid = k.remoteJid || '';\n  if (jid.endsWith('@lid')) jid = k.remoteJidAlt || k.senderPn || '';\n  if (!jid.endsWith('@s.whatsapp.net')) continue; // grupos, status e canais\n  const m = d.message || {};\n  const texto = m.conversation || (m.extendedTextMessage && m.extendedTextMessage.text)\n    || (m.imageMessage && m.imageMessage.caption) || (m.videoMessage && m.videoMessage.caption)\n    || '[' + (d.messageType || 'mensagem') + ']';\n  saida.push({ json: { instancia: b.instance, numero: jid.split('@')[0], nome: d.pushName || '', mensagem: texto } });\n}\nreturn saida;"
+        "jsCode": "// Lê o aviso do Evolution API e descarta o que não é conversa com uma pessoa.\nconst esperado = $env.WEBHOOK_TOKEN;\nconst saida = [];\nfor (const item of $input.all()) {\n  const headers = item.json.headers || {};\n  if (!esperado || headers['x-webhook-token'] !== esperado) continue; // não veio do nosso Evolution\n  const b = item.json.body || {};\n  if (b.event !== 'messages.upsert') continue;\n  const d = Array.isArray(b.data) ? b.data[0] : b.data;\n  const k = (d && d.key) || {};\n  let jid = k.remoteJid || '';\n  if (jid.endsWith('@lid')) jid = k.remoteJidAlt || k.senderPn || '';\n  if (!jid.endsWith('@s.whatsapp.net')) continue; // grupos, status e canais\n  const m = d.message || {};\n  const texto = m.conversation || (m.extendedTextMessage && m.extendedTextMessage.text)\n    || (m.imageMessage && m.imageMessage.caption) || (m.videoMessage && m.videoMessage.caption)\n    || '[' + (d.messageType || 'mensagem') + ']';\n  // de_mim: enviada pelo WhatsApp da agência (o ERP usa para o robô sair da conversa).\n  saida.push({ json: { instancia: b.instance, numero: jid.split('@')[0], nome: k.fromMe ? '' : (d.pushName || ''),\n    mensagem: texto, de_mim: Boolean(k.fromMe) } });\n}\nreturn saida;"
       }
     },
     {
       "id": "a3",
-      "name": "Registrar lead no ERP",
+      "name": "Perguntar ao ERP",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -42,7 +42,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ERP_URL }}/api/integracoes/lead",
+        "url": "={{ $env.ERP_URL }}/api/integracoes/whatsapp",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -54,13 +54,13 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ telefone: $json.numero, nome: $json.nome, mensagem: $json.mensagem, origem: \"WhatsApp\" }) }}",
+        "jsonBody": "={{ JSON.stringify({ telefone: $json.numero, nome: $json.nome, mensagem: $json.mensagem, de_mim: $json.de_mim }) }}",
         "options": {}
       }
     },
     {
       "id": "a4",
-      "name": "Só contato novo",
+      "name": "Só se tiver resposta",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -68,7 +68,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "// Só responde automaticamente no primeiro contato.\nconst padrao = 'Olá, {nome}! 👋 Aqui é da Maragogi Lab. Recebemos sua mensagem e já já alguém da equipe te responde.\\n\\nPra adiantar: você procura vídeo/fotografia, gestão de redes sociais ou tráfego pago?';\nconst modelo = $env.MENSAGEM_BOAS_VINDAS || padrao;\nconst contatos = $('Ler mensagem').all();\nreturn $input.all().map((item, i) => ({ item, contato: contatos[i].json }))\n  .filter(({ item }) => item.json.novo === true)\n  .map(({ contato }) => ({ json: {\n    instancia: contato.instancia,\n    numero: contato.numero,\n    texto: modelo.replace(/\\{nome\\}/g, (contato.nome || '').split(' ')[0] || 'tudo bem'),\n  } }));"
+        "jsCode": "// O ERP decide o que responder (menu, perguntas do orçamento...). Sem resposta, não manda nada.\nconst contatos = $('Ler mensagem').all();\nreturn $input.all().map((item, i) => ({ item, contato: contatos[i].json }))\n  .filter(({ item }) => typeof item.json.resposta === 'string' && item.json.resposta.trim())\n  .map(({ item, contato }) => ({ json: { instancia: contato.instancia, numero: contato.numero, texto: item.json.resposta } }));"
       }
     },
     {
@@ -115,25 +115,25 @@
       "main": [
         [
           {
-            "node": "Registrar lead no ERP",
+            "node": "Perguntar ao ERP",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Registrar lead no ERP": {
+    "Perguntar ao ERP": {
       "main": [
         [
           {
-            "node": "Só contato novo",
+            "node": "Só se tiver resposta",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Só contato novo": {
+    "Só se tiver resposta": {
       "main": [
         [
           {

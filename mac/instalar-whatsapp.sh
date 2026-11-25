@@ -20,7 +20,8 @@ PORTA_ERP=3737
 REPO="https://raw.githubusercontent.com/maragogilab-rgb/RA/HEAD"
 CODIGO="https://github.com/maragogilab-rgb/RA/archive/HEAD.tar.gz"
 INSTANCIA="maragogi"
-NOME_FLUXO="WhatsApp → lead no ERP + boas-vindas"
+NOME_FLUXO="WhatsApp → robô de atendimento do ERP"
+NOME_FLUXO_ANTIGO="WhatsApp → lead no ERP + boas-vindas"
 
 titulo() { printf '\n\033[1;34m==> %s\033[0m\n' "$1"; }
 aviso() { printf '\033[1;33m%s\033[0m\n' "$1"; }
@@ -118,22 +119,25 @@ curl -fs http://localhost:5678/healthz >/dev/null 2>&1 || falha "o n8n não ligo
 for _ in $(seq 1 60); do curl -fs http://localhost:8080 >/dev/null 2>&1 && break; sleep 2; done
 curl -fs http://localhost:8080 >/dev/null 2>&1 || falha "o Evolution API não ligou. Rode: cd $PASTA && docker compose logs evolution"
 
-# 5. Fluxo do n8n: importa uma vez e publica.
+# 5. Fluxo do n8n: instala ou atualiza (substitui a versão antiga, sem duplicar) e publica.
 titulo "Instalando o fluxo no n8n…"
 n8n() { docker compose exec -T n8n n8n "$@" </dev/null 2>&1 | grep -v "telemetry\|getaddrinfo\|onlookup" || true; }
-ID=$(n8n list:workflow | grep -F "|$NOME_FLUXO" | head -1 | cut -d'|' -f1 || true)
-if [ -z "$ID" ]; then
-  docker compose cp fluxo-whatsapp-lead.json n8n:/tmp/fluxo.json </dev/null >/dev/null 2>&1
-  n8n import:workflow --input=/tmp/fluxo.json >/dev/null
-  ID=$(n8n list:workflow | grep -F "|$NOME_FLUXO" | head -1 | cut -d'|' -f1 || true)
-  [ -n "$ID" ] || falha "não consegui importar o fluxo no n8n."
-  n8n publish:workflow --id="$ID" >/dev/null
-  docker compose restart n8n </dev/null >/dev/null 2>&1
-  for _ in $(seq 1 60); do curl -fs http://localhost:5678/healthz >/dev/null 2>&1 && break; sleep 2; done
-  echo "Fluxo instalado e ligado."
+idFluxo() { n8n list:workflow | grep -F -e "|$NOME_FLUXO" -e "|$NOME_FLUXO_ANTIGO" | head -1 | cut -d'|' -f1 || true; }
+ID=$(idFluxo)
+if [ -n "$ID" ]; then
+  # Com o mesmo id, o n8n troca o fluxo existente em vez de criar outro.
+  sed "1s/^{/{\"id\":\"$ID\",/" fluxo-whatsapp-lead.json >"$TMP/fluxo.json"
 else
-  echo "O fluxo já estava instalado."
+  cp fluxo-whatsapp-lead.json "$TMP/fluxo.json"
 fi
+docker compose cp "$TMP/fluxo.json" n8n:/tmp/fluxo.json </dev/null >/dev/null 2>&1
+n8n import:workflow --input=/tmp/fluxo.json >/dev/null
+ID=$(idFluxo)
+[ -n "$ID" ] || falha "não consegui instalar o fluxo no n8n."
+n8n publish:workflow --id="$ID" >/dev/null
+docker compose restart n8n </dev/null >/dev/null 2>&1
+for _ in $(seq 1 60); do curl -fs http://localhost:5678/healthz >/dev/null 2>&1 && break; sleep 2; done
+echo "Fluxo instalado e ligado."
 
 # 6. WhatsApp: instância e webhook.
 titulo "Preparando o WhatsApp…"
