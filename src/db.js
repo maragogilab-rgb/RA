@@ -271,6 +271,18 @@ CREATE TABLE IF NOT EXISTS ids_externos (
   PRIMARY KEY (origem, tabela, id_externo)
 );
 
+-- Conversas do robô de atendimento do WhatsApp (uma por número; chave = DDD + 8 últimos dígitos).
+CREATE TABLE IF NOT EXISTS whatsapp_conversas (
+  chave TEXT PRIMARY KEY,
+  cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
+  etapa TEXT NOT NULL,
+  dados TEXT,
+  invalidas INTEGER NOT NULL DEFAULT 0,
+  ultima_resposta TEXT,
+  ultima_resposta_em TEXT,
+  atualizado_em TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_projetos_status ON projetos(status);
 CREATE INDEX IF NOT EXISTS idx_lanc_venc ON lancamentos(vencimento);
 CREATE INDEX IF NOT EXISTS idx_lanc_status ON lancamentos(tipo, status);

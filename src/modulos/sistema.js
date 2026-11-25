@@ -6,6 +6,7 @@ const v = require('../validar');
 const { importarPainel } = require('../importar');
 const { transacao } = require('../db');
 const { lerPfx, cnpjDoCertificado } = require('../nfse/pkcs12');
+const { CAMPOS_BOT } = require('../whatsapp-bot');
 
 const exigirAdmin = (ctx) => {
   if (ctx.usuario.papel !== 'admin') throw erro(403, 'Acesso restrito a administradores');
@@ -46,7 +47,9 @@ const CAMPOS_EMPRESA = ['nome', 'razao_social', 'cnpj', 'inscricao_municipal', '
   'meta_mensal', 'meta_anual', 'metas_area', 'reserva_imposto_pct', 'reserva_equip_pct',
   'orcamento_parado_dias', 'pos_venda_dias', 'dia_das', 'comissao_parceiro_pct', 'email_nf_assunto', 'email_nf_corpo',
   // Emissão automática: padrão da nota, quando emitir, antecedência, desde quando e mensalidades automáticas.
-  'nfse_padrao', 'nfse_auto', 'nfse_auto_dias', 'nfse_auto_desde', 'fee_auto'];
+  'nfse_padrao', 'nfse_auto', 'nfse_auto_dias', 'nfse_auto_desde', 'fee_auto',
+  // Robô de atendimento do WhatsApp.
+  ...CAMPOS_BOT];
 
 // Áreas de negócio padrão (as metas por área podem trazer outras).
 const AREAS_PADRAO = ['Corporativo (marcas, shows, eventos)', 'Eventos sociais (casamentos)',
@@ -213,6 +216,7 @@ function registrar(router, db) {
     v.opcao(b.nfse_padrao, 'nfse_padrao', ['municipal', 'nacional']);
     v.opcao(b.nfse_auto, 'nfse_auto', ['desligado', 'recebimento', 'vencimento']);
     v.opcao(b.fee_auto, 'fee_auto', ['0', '1']);
+    v.opcao(b.bot_modo, 'bot_modo', ['menu', 'boas_vindas', 'desligado']);
     if (v.inteiro(b.nfse_auto_dias, 'nfse_auto_dias', { min: 0 }) > 30) throw erro(400, 'A antecedência da emissão vai de 0 a 30 dias');
     // Ao ligar a emissão automática, só entram contas a partir de hoje (nada de emitir o histórico antigo).
     const atual = lerEmpresa(db);
@@ -236,7 +240,7 @@ function registrar(router, db) {
         }
         valor = JSON.stringify(m);
       }
-      const max = c === 'logo' ? 700000 : ['termos_orcamento', 'metas_area', 'email_nf_corpo'].includes(c) ? 4000 : 500;
+      const max = c === 'logo' ? 700000 : ['termos_orcamento', 'metas_area', 'email_nf_corpo'].includes(c) || c.startsWith('bot_') ? 4000 : 500;
       gravar.push([`empresa.${c}`, v.texto(valor, c, { max }) || '']);
     }
     transacao(db, () => { for (const [chave, valor] of gravar) up.run(chave, valor); });

@@ -46,7 +46,7 @@ O certificado fica guardado só no seu Mac. O ERP avisa no Painel 30 dias antes 
 
 ## WhatsApp da agência ligado ao ERP
 
-Novo contato no WhatsApp vira **lead no ERP**, com tarefa para responder e mensagem de boas-vindas automática.
+Novo contato no WhatsApp vira **lead no ERP**, com tarefa para responder, e é atendido por um **robô com menu** (orçamento, trabalhos, falar com a equipe). Para atualizar uma instalação antiga, rode o mesmo comando de novo.
 Precisa do [Docker Desktop](https://www.docker.com/products/docker-desktop/) (o instalador avisa se faltar). Cole no Terminal:
 
 ```bash
